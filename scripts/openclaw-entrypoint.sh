@@ -12,7 +12,7 @@ OPENCLAW_GATEWAY_PORT="${OPENCLAW_GATEWAY_PORT:-7860}"
 OPENCLAW_INIT_GATEWAY_MODE="${OPENCLAW_INIT_GATEWAY_MODE:-local}"
 OPENCLAW_GATEWAY_AUTH_MODE="${OPENCLAW_GATEWAY_AUTH_MODE:-token}"
 OPENCLAW_LLM_PROVIDER="${OPENCLAW_LLM_PROVIDER:-thirdparty}"
-OPENCLAW_LLM_MODEL="${OPENCLAW_LLM_MODEL:-gpt-4o-mini}"
+OPENCLAW_LLM_MODEL="${OPENCLAW_LLM_MODEL:-}"
 OPENCLAW_LLM_API="${OPENCLAW_LLM_API:-openai-completions}"
 OPENCLAW_LLM_BASE_URL_ENV="${OPENCLAW_LLM_BASE_URL_ENV:-OPENCLAW_LLM_BASE_URL}"
 OPENCLAW_LLM_API_KEY_ENV="${OPENCLAW_LLM_API_KEY_ENV:-OPENCLAW_LLM_API_KEY}"
@@ -68,7 +68,7 @@ fix_permissions() {
   chown "$OPENCLAW_USER:$OPENCLAW_GROUP" "$OPENCLAW_HOME" "$OPENCLAW_STATE_DIR" "$OPENCLAW_WORKSPACE_DIR"
   chown "$OPENCLAW_USER:$OPENCLAW_GROUP" "$OPENCLAW_STDOUT_LOG_PATH" "$OPENCLAW_STDERR_LOG_PATH"
   chown "$OPENCLAW_USER:$OPENCLAW_GROUP" "$(dirname "$OPENCLAW_STDOUT_LOG_PATH")" "$(dirname "$OPENCLAW_STDERR_LOG_PATH")"
-  find "$OPENCLAW_STATE_DIR" -xdev -exec chown "$OPENCLAW_USER:$OPENCLAW_GROUP" {} +
+  find "$OPENCLAW_HOME" -xdev -exec chown "$OPENCLAW_USER:$OPENCLAW_GROUP" {} +
 }
 
 write_or_update_config() {
@@ -121,6 +121,7 @@ PY
   python3 - <<'PY'
 import json
 import os
+import sys
 from pathlib import Path
 
 config_path = Path(os.environ["OPENCLAW_CONFIG_PATH"])
@@ -132,11 +133,40 @@ if config_path.exists():
         config = {}
 
 provider = os.environ.get("OPENCLAW_LLM_PROVIDER", "thirdparty").strip() or "thirdparty"
-model = os.environ.get("OPENCLAW_LLM_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini"
-model_ref = f"{provider}/{model}"
+model = (os.environ.get("OPENCLAW_LLM_MODEL") or "").strip()
 api = os.environ.get("OPENCLAW_LLM_API", "openai-completions").strip() or "openai-completions"
 base_env_name = os.environ.get("OPENCLAW_LLM_BASE_URL_ENV", "OPENCLAW_LLM_BASE_URL").strip() or "OPENCLAW_LLM_BASE_URL"
 key_env_name = os.environ.get("OPENCLAW_LLM_API_KEY_ENV", "OPENCLAW_LLM_API_KEY").strip() or "OPENCLAW_LLM_API_KEY"
+base_url_value = (os.environ.get(base_env_name) or "").strip()
+api_key_value = (os.environ.get(key_env_name) or "").strip()
+
+missing_llm_env = []
+if not model:
+    missing_llm_env.append("OPENCLAW_LLM_MODEL")
+if not base_url_value:
+    missing_llm_env.append(base_env_name)
+if not api_key_value:
+    missing_llm_env.append(key_env_name)
+custom_llm_ready = not missing_llm_env
+model_ref = f"{provider}/{model}" if custom_llm_ready else ""
+
+if missing_llm_env:
+    print(
+        "openclaw: skip custom LLM model configuration because missing: "
+        + ", ".join(missing_llm_env),
+        file=sys.stderr,
+    )
+    sshx_auto_start = (os.environ.get("OPENCLAW_SSHX_AUTO_START") or "false").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    if not sshx_auto_start:
+        print(
+            "openclaw: if you want to configure LLM via sshx, consider setting OPENCLAW_SSHX_AUTO_START=true",
+            file=sys.stderr,
+        )
 
 fallback_allowed_origins = [f"http://127.0.0.1:{os.environ.get('OPENCLAW_GATEWAY_PORT', '7860')}"]
 allowed_origins = fallback_allowed_origins
@@ -221,32 +251,34 @@ if not isinstance(agents, dict):
 defaults = agents.get("defaults")
 if not isinstance(defaults, dict):
     defaults = {}
-defaults["model"] = {"primary": model_ref}
-allow_models = defaults.get("models")
-if not isinstance(allow_models, dict):
-    allow_models = {}
-allow_models.setdefault(model_ref, {"alias": "Default"})
-defaults["models"] = allow_models
+if custom_llm_ready:
+    defaults["model"] = {"primary": model_ref}
+    allow_models = defaults.get("models")
+    if not isinstance(allow_models, dict):
+        allow_models = {}
+    allow_models.setdefault(model_ref, {"alias": "Default"})
+    defaults["models"] = allow_models
 agents["defaults"] = defaults
 config["agents"] = agents
 
-models_cfg = config.get("models")
-if not isinstance(models_cfg, dict):
-    models_cfg = {}
-models_cfg["mode"] = "merge"
-providers = models_cfg.get("providers")
-if not isinstance(providers, dict):
-    providers = {}
-provider_cfg = providers.get(provider)
-if not isinstance(provider_cfg, dict):
-    provider_cfg = {}
-provider_cfg["baseUrl"] = f"${{{base_env_name}}}"
-provider_cfg["apiKey"] = f"${{{key_env_name}}}"
-provider_cfg["api"] = api
-provider_cfg["models"] = [{"id": model, "name": model}]
-providers[provider] = provider_cfg
-models_cfg["providers"] = providers
-config["models"] = models_cfg
+if custom_llm_ready:
+    models_cfg = config.get("models")
+    if not isinstance(models_cfg, dict):
+        models_cfg = {}
+    models_cfg["mode"] = "merge"
+    providers = models_cfg.get("providers")
+    if not isinstance(providers, dict):
+        providers = {}
+    provider_cfg = providers.get(provider)
+    if not isinstance(provider_cfg, dict):
+        provider_cfg = {}
+    provider_cfg["baseUrl"] = f"${{{base_env_name}}}"
+    provider_cfg["apiKey"] = f"${{{key_env_name}}}"
+    provider_cfg["api"] = api
+    provider_cfg["models"] = [{"id": model, "name": model}]
+    providers[provider] = provider_cfg
+    models_cfg["providers"] = providers
+    config["models"] = models_cfg
 
 config_path.parent.mkdir(parents=True, exist_ok=True)
 config_path.write_text(json.dumps(config, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
