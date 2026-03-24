@@ -94,7 +94,7 @@ hf upload <space_repo_id> . --repo-type space --exclude '.git/**' --exclude '.gi
 Copy and send to your agent:
 
 ```
-Please deploy OpenClaw to Hugging Face by strictly following the "Agent Deployment SOP (Collapsed)" section in https://github.com/tenfyzhong/openclaw-hf/blob/main/README.md.
+Please deploy OpenClaw to Hugging Face by strictly following the "Agent Deployment SOP (Collapsed)" section in https://github.com/tenfyzhong/openclaw-hf/blob/main/README.md
 ```
 
 ## Agent Deployment SOP (Collapsed)
