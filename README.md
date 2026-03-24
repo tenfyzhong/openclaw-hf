@@ -92,11 +92,7 @@ hf upload <space_repo_id> . --repo-type space --exclude '.git/**' --exclude '.gi
 Copy and send to your agent:
 
 ```
-Please deploy OpenClaw to Hugging Face by following the "Agent Deployment SOP (Collapsed)" section in https://github.com/tenfyzhong/openclaw-hf/blob/main/README.md.
-Before any deployment action, ask me for only missing required values.
-Treat OPENCLAW_LLM_BASE_URL + OPENCLAW_LLM_MODEL + OPENCLAW_LLM_API_KEY as an optional all-or-none set.
-If I skip optional LLM preconfiguration, ask whether to set OPENCLAW_SSHX_AUTO_START=true so I can configure via sshx later.
-After deployment, show me Space repo ID, App URL, Health URL, and keep-alive advice.
+Please deploy OpenClaw to Hugging Face by strictly following the "Agent Deployment SOP (Collapsed)" section in https://github.com/tenfyzhong/openclaw-hf/blob/main/README.md.
 ```
 
 ## Agent Deployment SOP (Collapsed)
