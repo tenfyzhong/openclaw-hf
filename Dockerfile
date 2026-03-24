@@ -37,14 +37,11 @@ RUN if ! getent group ubuntu >/dev/null; then \
 RUN HOME=/home/ubuntu gosu ubuntu /bin/bash -lc \
     "curl -fsSL https://openclaw.ai/install.sh | bash -s -- --no-onboard --version \"${OPENCLAW_VERSION}\""
 
-USER ubuntu
-
 RUN /bin/bash -lc 'set -euo pipefail; \
-    OPENCLAW_BIN="$(command -v openclaw || true)"; \
-    if [[ -z "$OPENCLAW_BIN" && -x /home/ubuntu/.npm-global/bin/openclaw ]]; then \
+    OPENCLAW_BIN=""; \
+    if [[ -x /home/ubuntu/.npm-global/bin/openclaw ]]; then \
       OPENCLAW_BIN=/home/ubuntu/.npm-global/bin/openclaw; \
-    fi; \
-    if [[ -z "$OPENCLAW_BIN" && -x /home/ubuntu/.local/bin/openclaw ]]; then \
+    elif [[ -x /home/ubuntu/.local/bin/openclaw ]]; then \
       OPENCLAW_BIN=/home/ubuntu/.local/bin/openclaw; \
     fi; \
     if [[ -z "$OPENCLAW_BIN" ]]; then \
@@ -52,7 +49,7 @@ RUN /bin/bash -lc 'set -euo pipefail; \
       exit 1; \
     fi; \
     ln -sf "$OPENCLAW_BIN" /usr/local/bin/openclaw; \
-    openclaw --help >/dev/null'
+    /usr/local/bin/openclaw --help >/dev/null'
 
 RUN python3 -m pip install --no-cache-dir --break-system-packages "huggingface_hub[cli]>=0.31.1"
 
