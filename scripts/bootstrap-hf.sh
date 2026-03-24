@@ -20,13 +20,14 @@ echo "visibility: private/private"
 echo
 echo "Set these Space variables/secrets:"
 echo "  OPENCLAW_BACKUP_DATASET_REPO=$DATASET_REPO_ID"
-echo "  OPENCLAW_LLM_BASE_URL=<your third-party base url>"
-echo "  OPENCLAW_LLM_API_KEY=<your third-party api key>"
+echo "  OPENCLAW_LLM_BASE_URL=<your third-party base url> (optional, set together with model+api key)"
+echo "  OPENCLAW_LLM_MODEL=<your third-party model id> (optional, set together with base url+api key)"
+echo "  OPENCLAW_LLM_API_KEY=<your third-party api key> (optional, set together with base url+model)"
 echo "  OPENCLAW_GATEWAY_TOKEN=<gateway token>"
 echo "  OPENCLAW_GATEWAY_PASSWORD=<gateway password>"
 echo "  OPENCLAW_GATEWAY_AUTH_MODE=token|password (default token)"
 echo "  OPENCLAW_GATEWAY_CONTROLUI_DANGEROUSLY_DISABLE_DEVICE_AUTH=true|false (default false)"
-echo "  OPENCLAW_SSHX_AUTO_START=true|false (default false)"
+echo "  OPENCLAW_SSHX_AUTO_START=true|false (default false; set true if you want to configure LLM via sshx)"
 echo "  HF_TOKEN=<token with write access to dataset>"
 
 echo

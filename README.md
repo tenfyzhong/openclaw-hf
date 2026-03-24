@@ -29,21 +29,31 @@ This setup is designed to provide the following:
 - `scripts/openclaw-restore.sh`: Startup restore entrypoint
 - `scripts/bootstrap-hf.sh`: Helper script to create a Space + Dataset
 - `tests/test_backup.py`: Unit tests for the backup module
+- `tests/test_entrypoint_config.py`: Unit tests for gateway config generation behavior
 
 ## Required Variables (Space Settings)
 
 In your Hugging Face Space (`Settings -> Variables and secrets`), configure at least:
 
-- Secret: `OPENCLAW_LLM_API_KEY`: Third-party API key
-- Variable: `OPENCLAW_LLM_BASE_URL`: Third-party base URL (for example OpenAI-compatible `/v1`)
 - Variable: `OPENCLAW_BACKUP_DATASET_REPO`: Backup target Dataset in `username/dataset-name` format
 - Secret: `HF_TOKEN`: Used to write backups to the Dataset (must have write permission to that Dataset)
 - Secret: `OPENCLAW_GATEWAY_TOKEN`: Fixed gateway token
 - Secret: `OPENCLAW_GATEWAY_PASSWORD`: Gateway password (optional)
 
+## Optional LLM Variables (All-Or-None)
+
+Set all of these together only when you want OpenClaw to preconfigure a custom third-party model:
+
+- Variable: `OPENCLAW_LLM_BASE_URL`: Third-party base URL (for example OpenAI-compatible `/v1`)
+- Variable: `OPENCLAW_LLM_MODEL`: Third-party model ID
+- Secret: `OPENCLAW_LLM_API_KEY`: Third-party API key
+
+If any of the three is missing, entrypoint skips custom model generation.
+In that case, you can still configure from inside the container (for example via `sshx`).
+
 ## Common Optional Variables
 
-- `OPENCLAW_LLM_MODEL` (default: `gpt-4o-mini`)
+- `OPENCLAW_LLM_MODEL` (unset by default; used only when custom model preconfiguration is enabled)
 - `OPENCLAW_LLM_PROVIDER` (default: `thirdparty`)
 - `OPENCLAW_LLM_API` (default: `openai-completions`)
 - `OPENCLAW_STATE_DIR` (default: `/home/ubuntu/.openclaw`)
@@ -82,7 +92,7 @@ hf upload <space_repo_id> . --repo-type space --exclude '.git/**' --exclude '.gi
 Copy and send to your agent:
 
 ```
-Please install and deploy OpenClaw to Hugging Face by following the "Agent Deployment SOP (Collapsed)" section in https://github.com/tenfyzhong/openclaw-hf/blob/main/README.md. Ask me for any missing required values before you continue. After deployment is complete, show me the final access URLs and remind me about keep-alive.
+Please install and deploy OpenClaw to Hugging Face by following the "Agent Deployment SOP (Collapsed)" section in https://github.com/tenfyzhong/openclaw-hf/blob/main/README.md.
 ```
 
 ## Agent Deployment SOP (Collapsed)
@@ -132,15 +142,25 @@ hf version
 
 Agent must require user inputs for:
 
-- `OPENCLAW_LLM_BASE_URL`
-- `OPENCLAW_LLM_MODEL`
-- `OPENCLAW_LLM_API_KEY`
 - `OPENCLAW_GATEWAY_TOKEN`
 - `OPENCLAW_GATEWAY_PASSWORD`
 - `space_name`
 - `dataset_name`
 
 `HF_TOKEN` is not required from user input. It is derived from current HF CLI login session automatically.
+Ask the user for any missing required values before continuing.
+
+Agent should treat the following as optional, but all-or-none for preconfiguring a custom model:
+
+- `OPENCLAW_LLM_BASE_URL`
+- `OPENCLAW_LLM_MODEL`
+- `OPENCLAW_LLM_API_KEY`
+
+If user does not provide all three LLM values, agent must continue deployment without custom model preconfiguration, and ask:
+
+- Whether to set `OPENCLAW_SSHX_AUTO_START=true` so user can configure LLM via `sshx` after startup.
+
+When asking for missing values, agent must only ask for missing required keys. The optional LLM triplet above should be offered as an all-or-none option, not treated as required.
 
 Before asking for values, agent must pick explanation language from runtime context:
 
@@ -156,15 +176,15 @@ USER_LANG="${LC_ALL:-${LC_MESSAGES:-${LANG:-en_US.UTF-8}}}"
 
 Agent must explain what each variable is used for in the selected language when asking user to provide values:
 
-- `OPENCLAW_LLM_BASE_URL`: LLM API base URL endpoint.
-- `OPENCLAW_LLM_MODEL`: LLM model ID used by OpenClaw.
-- `OPENCLAW_LLM_API_KEY`: LLM provider API key (secret).
+- `OPENCLAW_LLM_BASE_URL` (optional): LLM API base URL endpoint.
+- `OPENCLAW_LLM_MODEL` (optional): LLM model ID used by OpenClaw.
+- `OPENCLAW_LLM_API_KEY` (optional): LLM provider API key (secret).
 - `OPENCLAW_GATEWAY_TOKEN`: gateway token for token auth mode (secret).
 - `OPENCLAW_GATEWAY_PASSWORD`: gateway password for password auth mode (secret).
 - `space_name`: Hugging Face Space name; final repo ID becomes `<hf_username>/<space_name>`.
 - `dataset_name`: Hugging Face Dataset name for backup; final repo ID becomes `<hf_username>/<dataset_name>`.
 
-If any required value is missing, agent must ask user for only the missing keys, then wait for user input before continuing.
+If any required value is missing, agent must ask user for only the missing required keys, then wait for user input before continuing.
 
 ### 3. Ensure `hf` CLI is authenticated, derive `HF_TOKEN`, and clone repo
 
@@ -204,8 +224,10 @@ cd openclaw-hf
 
 Use values to set:
 
-- Secrets: `OPENCLAW_LLM_API_KEY`, `OPENCLAW_GATEWAY_TOKEN`, `OPENCLAW_GATEWAY_PASSWORD`, `HF_TOKEN` (auto-derived)
-- Variables: `OPENCLAW_LLM_BASE_URL`, `OPENCLAW_LLM_MODEL`, `OPENCLAW_BACKUP_DATASET_REPO`
+- Required secrets: `OPENCLAW_GATEWAY_TOKEN`, `OPENCLAW_GATEWAY_PASSWORD`, `HF_TOKEN` (auto-derived)
+- Required variables: `OPENCLAW_BACKUP_DATASET_REPO`
+- Optional LLM values (set together): `OPENCLAW_LLM_BASE_URL`, `OPENCLAW_LLM_MODEL`, `OPENCLAW_LLM_API_KEY`
+- Optional access helper: `OPENCLAW_SSHX_AUTO_START=true` (recommended when skipping LLM preconfiguration and you plan to configure via `sshx`)
 
 Agent must also set these additional variables:
 
@@ -233,7 +255,7 @@ Then configure the Space Settings (`Variables and secrets`) using all values abo
 
 ### 5. Final user hand-off (required)
 
-After deployment succeeds, agent must show access info and keep-alive guidance to the user.
+After deployment is complete, agent must show final access URLs and remind the user about keep-alive.
 
 Build URLs from `space_repo_id`:
 
