@@ -82,7 +82,7 @@ hf upload <space_repo_id> . --repo-type space --exclude '.git/**' --exclude '.gi
 Copy and send to your agent:
 
 ```
-Please install and deploy OpenClaw to Hugging Face by following the "Agent Deployment SOP (Collapsed)" section in https://github.com/tenfyzhong/openclaw-hf/blob/main/README.md. Ask me for any missing required values before you continue.
+Please install and deploy OpenClaw to Hugging Face by following the "Agent Deployment SOP (Collapsed)" section in https://github.com/tenfyzhong/openclaw-hf/blob/main/README.md. Ask me for any missing required values before you continue. After deployment is complete, show me the final access URLs and remind me about keep-alive.
 ```
 
 ## Agent Deployment SOP (Collapsed)
@@ -230,6 +230,27 @@ hf upload "$space_repo_id" . --repo-type space --exclude '.git/**' --exclude '.g
 ```
 
 Then configure the Space Settings (`Variables and secrets`) using all values above, restart the Space, and verify `/healthz`.
+
+### 5. Final user hand-off (required)
+
+After deployment succeeds, agent must show access info and keep-alive guidance to the user.
+
+Build URLs from `space_repo_id`:
+
+```bash
+space_host="${space_repo_id/\//-}.hf.space"
+app_url="https://${space_host}"
+health_url="${app_url}/healthz"
+```
+
+Agent final message must include:
+
+- Space repo ID: `<owner>/<space_name>`
+- App URL: `https://<owner>-<space_name>.hf.space`
+- Health URL: `https://<owner>-<space_name>.hf.space/healthz`
+- Keep-alive reminder:
+  - For strict 24/7 uptime, use paid hardware and set `Sleep time` to `Never`.
+  - On free tier, remind user the Space may sleep after inactivity and suggest periodic health checks as a workaround.
 
 </details>
 
