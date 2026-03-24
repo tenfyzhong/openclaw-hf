@@ -26,6 +26,7 @@ echo "  OPENCLAW_GATEWAY_TOKEN=<gateway token>"
 echo "  OPENCLAW_GATEWAY_PASSWORD=<gateway password>"
 echo "  OPENCLAW_GATEWAY_AUTH_MODE=token|password (default token)"
 echo "  OPENCLAW_GATEWAY_CONTROLUI_DANGEROUSLY_DISABLE_DEVICE_AUTH=true|false (default false)"
+echo "  OPENCLAW_SSHX_AUTO_START=true|false (default false)"
 echo "  HF_TOKEN=<token with write access to dataset>"
 
 echo
