@@ -21,9 +21,11 @@ OPENCLAW_BACKUP_CRON="${OPENCLAW_BACKUP_CRON:-*/30 * * * *}"
 OPENCLAW_BACKUP_SOURCE_DIR="${OPENCLAW_BACKUP_SOURCE_DIR:-/home/ubuntu}"
 OPENCLAW_STDOUT_LOG_PATH="${OPENCLAW_STDOUT_LOG_PATH:-/var/log/openclaw/gateway.stdout.log}"
 OPENCLAW_STDERR_LOG_PATH="${OPENCLAW_STDERR_LOG_PATH:-/var/log/openclaw/gateway.stderr.log}"
+OPENCLAW_SSHX_AUTO_START="${OPENCLAW_SSHX_AUTO_START:-false}"
 OPENCLAW_GATEWAY_CONTROLUI_ALLOW_INSECURE_AUTH="${OPENCLAW_GATEWAY_CONTROLUI_ALLOW_INSECURE_AUTH:-false}"
 OPENCLAW_GATEWAY_CONTROLUI_DANGEROUSLY_DISABLE_DEVICE_AUTH="${OPENCLAW_GATEWAY_CONTROLUI_DANGEROUSLY_DISABLE_DEVICE_AUTH:-false}"
 OPENCLAW_CHILD_PID=""
+OPENCLAW_SSHX_PID=""
 OPENCLAW_SHUTDOWN_BACKUP_DONE=0
 
 export HOME="$OPENCLAW_HOME"
@@ -332,6 +334,38 @@ run_as_node_background() {
   OPENCLAW_CHILD_PID="$!"
 }
 
+run_as_node_background_stdout() {
+  local cmd=("$@")
+  if [[ "$(id -u)" -eq 0 ]]; then
+    gosu "$OPENCLAW_USER:$OPENCLAW_GROUP" "${cmd[@]}" &
+  else
+    "${cmd[@]}" &
+  fi
+  echo "$!"
+}
+
+start_sshx_background() {
+  if ! is_true "$OPENCLAW_SSHX_AUTO_START"; then
+    return 0
+  fi
+
+  if ! command -v sshx >/dev/null 2>&1; then
+    echo "openclaw: OPENCLAW_SSHX_AUTO_START=true but sshx not found; skip auto start" >&2
+    return 0
+  fi
+
+  OPENCLAW_SSHX_PID="$(run_as_node_background_stdout sshx)"
+  echo "openclaw: sshx started in background (pid=$OPENCLAW_SSHX_PID); sshx output is on stdout/stderr"
+}
+
+stop_sshx_background() {
+  if [[ -n "$OPENCLAW_SSHX_PID" ]] && kill -0 "$OPENCLAW_SSHX_PID" >/dev/null 2>&1; then
+    echo "openclaw: stopping sshx background process (pid=$OPENCLAW_SSHX_PID)"
+    kill "$OPENCLAW_SSHX_PID" >/dev/null 2>&1 || true
+    wait "$OPENCLAW_SSHX_PID" >/dev/null 2>&1 || true
+  fi
+}
+
 backup_on_shutdown() {
   if [[ "$OPENCLAW_SHUTDOWN_BACKUP_DONE" -eq 1 ]]; then
     return 0
@@ -370,6 +404,7 @@ run_gateway_with_shutdown_backup() {
       fi
     fi
 
+    stop_sshx_background
     backup_on_shutdown
     trap - TERM INT QUIT
     exit "$gateway_exit_code"
@@ -384,6 +419,7 @@ run_gateway_with_shutdown_backup() {
     gateway_exit_code=$?
   fi
 
+  stop_sshx_background
   backup_on_shutdown
   trap - TERM INT QUIT
   return "$gateway_exit_code"
@@ -403,6 +439,7 @@ main() {
     write_or_update_config
     fix_permissions
     setup_backup_cron
+    start_sshx_background
     run_gateway_with_shutdown_backup "$@"
   else
     run_as_node openclaw "$subcommand" "$@"

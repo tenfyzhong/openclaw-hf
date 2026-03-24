@@ -53,6 +53,7 @@ In your Hugging Face Space (`Settings -> Variables and secrets`), configure at l
 - `OPENCLAW_BACKUP_SOURCE_DIR` (default: `/home/ubuntu`, backup/restore root directory)
 - `OPENCLAW_BACKUP_PATH_PREFIX` (default: `backups`)
 - `OPENCLAW_BACKUP_LATEST_NAME` (default: `latest-backup.tar.gz`)
+- `OPENCLAW_SSHX_AUTO_START` (default: `false`; set `true` to auto-run `sshx` in background on startup)
 - `OPENCLAW_GATEWAY_AUTH_MODE` (default: `token`, optional: `password`)
 - `OPENCLAW_GATEWAY_CONTROLUI_ALLOW_INSECURE_AUTH` (default: `false`)
 - `OPENCLAW_GATEWAY_CONTROLUI_DANGEROUSLY_DISABLE_DEVICE_AUTH` (default: `false`; set `true` to bypass pairing, strongly discouraged on public networks)
@@ -141,6 +142,28 @@ Agent must require user inputs for:
 
 `HF_TOKEN` is not required from user input. It is derived from current HF CLI login session automatically.
 
+Before asking for values, agent must pick explanation language from runtime context:
+
+- If user explicitly asks for a language, use that language.
+- Else infer from agent environment language (`LC_ALL`, `LC_MESSAGES`, `LANG`).
+- Fallback to English when language cannot be inferred.
+
+Reference detection command:
+
+```bash
+USER_LANG="${LC_ALL:-${LC_MESSAGES:-${LANG:-en_US.UTF-8}}}"
+```
+
+Agent must explain what each variable is used for in the selected language when asking user to provide values:
+
+- `OPENCLAW_LLM_BASE_URL`: LLM API base URL endpoint.
+- `OPENCLAW_LLM_MODEL`: LLM model ID used by OpenClaw.
+- `OPENCLAW_LLM_API_KEY`: LLM provider API key (secret).
+- `OPENCLAW_GATEWAY_TOKEN`: gateway token for token auth mode (secret).
+- `OPENCLAW_GATEWAY_PASSWORD`: gateway password for password auth mode (secret).
+- `space_name`: Hugging Face Space name; final repo ID becomes `<hf_username>/<space_name>`.
+- `dataset_name`: Hugging Face Dataset name for backup; final repo ID becomes `<hf_username>/<dataset_name>`.
+
 If any required value is missing, agent must ask user for only the missing keys, then wait for user input before continuing.
 
 ### 3. Ensure `hf` CLI is authenticated, derive `HF_TOKEN`, and clone repo
@@ -188,6 +211,13 @@ Agent must also set these additional variables:
 
 - `OPENCLAW_GATEWAY_CONTROLUI_ALLOW_INSECURE_AUTH=true`
 - `OPENCLAW_GATEWAY_CONTROLUI_DANGEROUSLY_DISABLE_DEVICE_AUTH=true`
+
+When guiding user to configure these values, agent must explain the purpose of each key in the user's language:
+
+- `HF_TOKEN`: Hugging Face token with write permission to the backup dataset.
+- `OPENCLAW_BACKUP_DATASET_REPO`: backup dataset repo ID (`<hf_username>/<dataset_name>`).
+- `OPENCLAW_GATEWAY_CONTROLUI_ALLOW_INSECURE_AUTH`: allows insecure auth behavior in Control UI (development/testing usage only).
+- `OPENCLAW_GATEWAY_CONTROLUI_DANGEROUSLY_DISABLE_DEVICE_AUTH`: disables device auth flow in Control UI (high risk; use only when explicitly intended).
 
 ### 4. Create Space + Dataset and upload code to Hugging Face
 
@@ -279,13 +309,34 @@ For this project, if you need stable dashboard access without cold starts, use p
 
 ## Use sshx Inside the Container
 
-`sshx` is preinstalled in the image. Run this inside the container:
+`sshx` is preinstalled in the image.
+
+1. Auto-start `sshx` in background via environment variables:
+
+```bash
+OPENCLAW_SSHX_AUTO_START=true
+```
+
+When enabled, entrypoint starts `sshx` in background and sends `sshx` output directly to container stdout/stderr logs (no file logging).
+
+2. Manual start inside container:
 
 ```bash
 sshx
 ```
 
-It will print a shareable terminal link after startup.
+3. Let OpenClaw start a process itself (run in OpenClaw terminal/tool):
+
+```bash
+nohup sshx >/proc/1/fd/1 2>/proc/1/fd/2 &
+```
+
+4. After use, close `sshx` process promptly:
+
+```bash
+pgrep -fa sshx
+pkill -TERM -f '(^|/)sshx($| )'
+```
 
 ## Local Test
 
