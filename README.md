@@ -92,7 +92,11 @@ hf upload <space_repo_id> . --repo-type space --exclude '.git/**' --exclude '.gi
 Copy and send to your agent:
 
 ```
-Please install and deploy OpenClaw to Hugging Face by following the "Agent Deployment SOP (Collapsed)" section in https://github.com/tenfyzhong/openclaw-hf/blob/main/README.md.
+Please deploy OpenClaw to Hugging Face by following the "Agent Deployment SOP (Collapsed)" section in https://github.com/tenfyzhong/openclaw-hf/blob/main/README.md.
+Before any deployment action, ask me for only missing required values.
+Treat OPENCLAW_LLM_BASE_URL + OPENCLAW_LLM_MODEL + OPENCLAW_LLM_API_KEY as an optional all-or-none set.
+If I skip optional LLM preconfiguration, ask whether to set OPENCLAW_SSHX_AUTO_START=true so I can configure via sshx later.
+After deployment, show me Space repo ID, App URL, Health URL, and keep-alive advice.
 ```
 
 ## Agent Deployment SOP (Collapsed)
@@ -140,7 +144,9 @@ hf version
 
 ### 2. Collect required inputs from user first
 
-Agent must require user inputs for:
+Agent must ask the user for inputs in one consolidated message, then wait for response.
+
+Required user inputs:
 
 - `OPENCLAW_GATEWAY_TOKEN`
 - `OPENCLAW_GATEWAY_PASSWORD`
@@ -148,15 +154,14 @@ Agent must require user inputs for:
 - `dataset_name`
 
 `HF_TOKEN` is not required from user input. It is derived from current HF CLI login session automatically.
-Ask the user for any missing required values before continuing.
 
-Agent should treat the following as optional, but all-or-none for preconfiguring a custom model:
+Optional user inputs (all-or-none, only for preconfiguring a custom model):
 
 - `OPENCLAW_LLM_BASE_URL`
 - `OPENCLAW_LLM_MODEL`
 - `OPENCLAW_LLM_API_KEY`
 
-If user does not provide all three LLM values, agent must continue deployment without custom model preconfiguration, and ask:
+If user skips the optional LLM triplet, agent must continue without custom model preconfiguration and ask:
 
 - Whether to set `OPENCLAW_SSHX_AUTO_START=true` so user can configure LLM via `sshx` after startup.
 
@@ -184,7 +189,24 @@ Agent must explain what each variable is used for in the selected language when 
 - `space_name`: Hugging Face Space name; final repo ID becomes `<hf_username>/<space_name>`.
 - `dataset_name`: Hugging Face Dataset name for backup; final repo ID becomes `<hf_username>/<dataset_name>`.
 
-If any required value is missing, agent must ask user for only the missing required keys, then wait for user input before continuing.
+Recommended question template:
+
+```text
+To continue deployment, I need these required values:
+- OPENCLAW_GATEWAY_TOKEN: gateway token for token auth mode (secret)
+- OPENCLAW_GATEWAY_PASSWORD: gateway password for password auth mode (secret)
+- space_name: Space name (final repo: <hf_username>/<space_name>)
+- dataset_name: Dataset name (final repo: <hf_username>/<dataset_name>)
+
+Optional (provide all 3 together only if you want custom LLM preconfiguration now):
+- OPENCLAW_LLM_BASE_URL
+- OPENCLAW_LLM_MODEL
+- OPENCLAW_LLM_API_KEY
+
+If you skip optional LLM preconfiguration, do you want me to set OPENCLAW_SSHX_AUTO_START=true so you can configure via sshx later?
+```
+
+On follow-up turns, agent must ask only for missing required keys (do not repeatedly ask for values already provided).
 
 ### 3. Ensure `hf` CLI is authenticated, derive `HF_TOKEN`, and clone repo
 
