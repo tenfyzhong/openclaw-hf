@@ -17,7 +17,7 @@ This setup is designed to provide the following:
 - Use third-party OpenAI-compatible `base_url + api_key` by default (injected via environment variables)
 - Store OpenClaw config/workspace under `/home/ubuntu/.openclaw`
 - Restore state automatically from a Hugging Face Dataset on startup
-- Run scheduled backups of OpenClaw data to a Hugging Face Dataset via `cron`
+- Run scheduled backups of OpenClaw data to a Hugging Face Dataset via `cron` (as `ubuntu` user)
 - Preinstall `sshx` in the image so you can open a shareable terminal session from inside the container
 
 ## Repository Layout
@@ -57,10 +57,12 @@ In that case, you can still configure from inside the container (for example via
 - `OPENCLAW_LLM_PROVIDER` (default: `thirdparty`)
 - `OPENCLAW_LLM_API` (default: `openai-completions`)
 - `OPENCLAW_STATE_DIR` (default: `/home/ubuntu/.openclaw`)
+- `OPENCLAW_USER` (default: `ubuntu`, runtime user for gateway and cron jobs)
+- `OPENCLAW_GROUP` (default: `ubuntu`, runtime group for gateway and cron jobs)
 - `OPENCLAW_CONFIG_PATH` (default: `/home/ubuntu/.openclaw/openclaw.json`)
 - `OPENCLAW_WORKSPACE_DIR` (default: `/home/ubuntu/.openclaw/workspace`)
 - `OPENCLAW_BACKUP_CRON` (default: `*/30 * * * *`, backup every 30 minutes)
-- `OPENCLAW_BACKUP_SOURCE_DIR` (default: `/home/ubuntu`, backup/restore root directory)
+- `OPENCLAW_BACKUP_SOURCE_DIR` (default: `/home/ubuntu`, backup/restore base directory)
 - `OPENCLAW_BACKUP_PATH_PREFIX` (default: `backups`)
 - `OPENCLAW_BACKUP_LATEST_NAME` (default: `latest-backup.tar.gz`)
 - `OPENCLAW_SSHX_AUTO_START` (default: `false`; set `true` to auto-run `sshx` in background on startup)
