@@ -148,8 +148,14 @@ Required user inputs:
 - `OPENCLAW_GATEWAY_PASSWORD`
 - `space_name`
 - `dataset_name`
+- `hf_auth_mode`: choose one of:
+  - `current-login`: use current local `hf auth` login session
+  - `new-token`: use a user-provided `HF_TOKEN` for this deployment
 
-`HF_TOKEN` is not required from user input. It is derived from current HF CLI login session automatically.
+Conditional required user input:
+
+- `HF_TOKEN` (secret), required only when `hf_auth_mode=new-token`.
+  Agent must explain that it will backup the current local HF token first, use this new token for deployment, then restore the previous local token after deployment.
 
 Optional user inputs (all-or-none, only for preconfiguring a custom model):
 
@@ -177,6 +183,8 @@ USER_LANG="${LC_ALL:-${LC_MESSAGES:-${LANG:-en_US.UTF-8}}}"
 
 Agent must explain what each variable is used for in the selected language when asking user to provide values:
 
+- `hf_auth_mode`: whether to deploy with current HF login (`current-login`) or a new token (`new-token`).
+- `HF_TOKEN` (conditional): HF token used only when `hf_auth_mode=new-token`.
 - `OPENCLAW_LLM_BASE_URL` (optional): LLM API base URL endpoint.
 - `OPENCLAW_LLM_MODEL` (optional): LLM model ID used by OpenClaw.
 - `OPENCLAW_LLM_API_KEY` (optional): LLM provider API key (secret).
@@ -188,11 +196,18 @@ Agent must explain what each variable is used for in the selected language when 
 Recommended question template:
 
 ```text
-To continue deployment, I need these required values:
+Before deployment, choose HF auth mode:
+- current-login: use your current local hf login account
+- new-token: use a new HF_TOKEN for this deployment (I will backup local token first and restore it after deployment)
+
+Then provide these required values:
 - OPENCLAW_GATEWAY_TOKEN: gateway token for token auth mode (secret)
 - OPENCLAW_GATEWAY_PASSWORD: gateway password for password auth mode (secret)
 - space_name: Space name (final repo: <hf_username>/<space_name>)
 - dataset_name: Dataset name (final repo: <hf_username>/<dataset_name>)
+
+If you choose new-token mode, also provide:
+- HF_TOKEN: token with write access to the target Space and Dataset
 
 Optional (provide all 3 together only if you want custom LLM preconfiguration now):
 - OPENCLAW_LLM_BASE_URL
@@ -204,9 +219,26 @@ If you skip optional LLM preconfiguration, do you want me to set OPENCLAW_SSHX_A
 
 On follow-up turns, agent must ask only for missing required keys (do not repeatedly ask for values already provided).
 
-### 3. Ensure `hf` CLI is authenticated, derive `HF_TOKEN`, and clone repo
+### 3. Backup HF token, authenticate according to mode, derive IDs, and clone repo
 
-Before deployment, agent must verify HF CLI auth:
+Before switching auth context, backup current local HF token state:
+
+```bash
+HF_TOKEN_FILE="$HOME/.cache/huggingface/token"
+HF_TOKEN_BACKUP_FILE="$HOME/.cache/huggingface/token.openclaw.backup"
+HF_TOKEN_BACKUP_STATE_FILE="$HOME/.cache/huggingface/token.openclaw.backup.state"
+
+mkdir -p "$(dirname "$HF_TOKEN_FILE")"
+if [ -f "$HF_TOKEN_FILE" ]; then
+  cp "$HF_TOKEN_FILE" "$HF_TOKEN_BACKUP_FILE"
+  printf 'present\n' > "$HF_TOKEN_BACKUP_STATE_FILE"
+else
+  rm -f "$HF_TOKEN_BACKUP_FILE"
+  printf 'absent\n' > "$HF_TOKEN_BACKUP_STATE_FILE"
+fi
+```
+
+If `hf_auth_mode=current-login`:
 
 ```bash
 hf auth whoami
@@ -219,10 +251,18 @@ hf auth login --token <HF_WRITE_TOKEN>
 hf auth whoami
 ```
 
-After login, derive `HF_TOKEN` automatically from local HF CLI credentials (do not ask user to provide `HF_TOKEN` separately):
+Then derive `HF_TOKEN` from local HF CLI credentials:
 
 ```bash
-HF_TOKEN="$(cat "$HOME/.cache/huggingface/token")"
+HF_TOKEN="$(cat "$HF_TOKEN_FILE")"
+```
+
+If `hf_auth_mode=new-token`:
+
+```bash
+HF_TOKEN="<USER_PROVIDED_HF_TOKEN>"
+hf auth login --token "$HF_TOKEN"
+hf auth whoami
 ```
 
 Derive `hf_username`, `space_repo_id`, and `dataset_repo_id` from HF CLI login + user-provided names (do not ask user for full repo IDs):
@@ -242,7 +282,7 @@ cd openclaw-hf
 
 Use values to set:
 
-- Required secrets: `OPENCLAW_GATEWAY_TOKEN`, `OPENCLAW_GATEWAY_PASSWORD`, `HF_TOKEN` (auto-derived)
+- Required secrets: `OPENCLAW_GATEWAY_TOKEN`, `OPENCLAW_GATEWAY_PASSWORD`, `HF_TOKEN` (from selected auth mode)
 - Required variables: `OPENCLAW_BACKUP_DATASET_REPO`
 - Optional LLM values (set together): `OPENCLAW_LLM_BASE_URL`, `OPENCLAW_LLM_MODEL`, `OPENCLAW_LLM_API_KEY`
 - Optional access helper: `OPENCLAW_SSHX_AUTO_START=true` (recommended when skipping LLM preconfiguration and you plan to configure via `sshx`)
@@ -273,7 +313,24 @@ Then configure the Space Settings (`Variables and secrets`) using all values abo
 
 ### 5. Final user hand-off (required)
 
-After deployment is complete, agent must show final access URLs and remind the user about keep-alive.
+Before final response, restore local HF token state from backup:
+
+```bash
+HF_TOKEN_FILE="$HOME/.cache/huggingface/token"
+HF_TOKEN_BACKUP_FILE="$HOME/.cache/huggingface/token.openclaw.backup"
+HF_TOKEN_BACKUP_STATE_FILE="$HOME/.cache/huggingface/token.openclaw.backup.state"
+
+if [ -f "$HF_TOKEN_BACKUP_STATE_FILE" ]; then
+  if [ "$(cat "$HF_TOKEN_BACKUP_STATE_FILE")" = "present" ] && [ -f "$HF_TOKEN_BACKUP_FILE" ]; then
+    cp "$HF_TOKEN_BACKUP_FILE" "$HF_TOKEN_FILE"
+  else
+    rm -f "$HF_TOKEN_FILE"
+  fi
+  rm -f "$HF_TOKEN_BACKUP_FILE" "$HF_TOKEN_BACKUP_STATE_FILE"
+fi
+```
+
+After deployment is complete and local HF token state is restored, agent must show final access URLs and remind the user about keep-alive.
 
 Build URLs from `space_repo_id`:
 
