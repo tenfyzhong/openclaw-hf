@@ -141,6 +141,14 @@ hf version
 ### 2. Collect required inputs from user first
 
 Agent must ask the user for inputs in one consolidated message, then wait for response.
+Before asking, detect whether HF CLI is already logged in:
+
+```bash
+HF_AUTH_LOGGED_IN=0
+if hf auth whoami >/dev/null 2>&1; then
+  HF_AUTH_LOGGED_IN=1
+fi
+```
 
 Required user inputs:
 
@@ -148,14 +156,17 @@ Required user inputs:
 - `OPENCLAW_GATEWAY_PASSWORD`
 - `space_name`
 - `dataset_name`
-- `hf_auth_mode`: choose one of:
-  - `current-login`: use current local `hf auth` login session
-  - `new-token`: use a user-provided `HF_TOKEN` for this deployment
 
 Conditional required user input:
 
-- `HF_TOKEN` (secret), required only when `hf_auth_mode=new-token`.
-  Agent must explain that it will backup the current local HF token first, use this new token for deployment, then restore the previous local token after deployment.
+- If `HF_AUTH_LOGGED_IN=1`, ask user to choose `hf_auth_mode`:
+  - `current-login`: use current local `hf auth` login session
+  - `new-token`: use a user-provided `HF_TOKEN` for this deployment
+- If `HF_AUTH_LOGGED_IN=0`, do not ask for mode selection. Require `HF_TOKEN` directly.
+- `HF_TOKEN` (secret) is required when:
+  - `HF_AUTH_LOGGED_IN=0`, or
+  - `HF_AUTH_LOGGED_IN=1` and user selects `hf_auth_mode=new-token`.
+  Agent must explain that it will backup the current local HF token state first, use this token for deployment, then restore the previous local token state after deployment.
 
 Optional user inputs (all-or-none, only for preconfiguring a custom model):
 
@@ -183,8 +194,8 @@ USER_LANG="${LC_ALL:-${LC_MESSAGES:-${LANG:-en_US.UTF-8}}}"
 
 Agent must explain what each variable is used for in the selected language when asking user to provide values:
 
-- `hf_auth_mode`: whether to deploy with current HF login (`current-login`) or a new token (`new-token`).
-- `HF_TOKEN` (conditional): HF token used only when `hf_auth_mode=new-token`.
+- `hf_auth_mode` (conditional, only ask when HF already logged in): whether to deploy with current HF login (`current-login`) or a new token (`new-token`).
+- `HF_TOKEN` (conditional): HF token used when HF is not logged in, or when `hf_auth_mode=new-token`.
 - `OPENCLAW_LLM_BASE_URL` (optional): LLM API base URL endpoint.
 - `OPENCLAW_LLM_MODEL` (optional): LLM model ID used by OpenClaw.
 - `OPENCLAW_LLM_API_KEY` (optional): LLM provider API key (secret).
@@ -196,17 +207,23 @@ Agent must explain what each variable is used for in the selected language when 
 Recommended question template:
 
 ```text
-Before deployment, choose HF auth mode:
-- current-login: use your current local hf login account
-- new-token: use a new HF_TOKEN for this deployment (I will backup local token first and restore it after deployment)
+I checked your local HF login status first.
 
-Then provide these required values:
+If HF is already logged in:
+- Please choose auth mode:
+  - current-login: use your current local hf login account
+  - new-token: use a new HF_TOKEN for this deployment (I will backup local token first and restore it after deployment)
+
+If HF is not logged in:
+- I will use a new HF_TOKEN for this deployment by default.
+
+Please provide these required values:
 - OPENCLAW_GATEWAY_TOKEN: gateway token for token auth mode (secret)
 - OPENCLAW_GATEWAY_PASSWORD: gateway password for password auth mode (secret)
 - space_name: Space name (final repo: <hf_username>/<space_name>)
 - dataset_name: Dataset name (final repo: <hf_username>/<dataset_name>)
 
-If you choose new-token mode, also provide:
+If HF is not logged in, or if you choose new-token mode, also provide:
 - HF_TOKEN: token with write access to the target Space and Dataset
 
 Optional (provide all 3 together only if you want custom LLM preconfiguration now):
@@ -219,7 +236,7 @@ If you skip optional LLM preconfiguration, do you want me to set OPENCLAW_SSHX_A
 
 On follow-up turns, agent must ask only for missing required keys (do not repeatedly ask for values already provided).
 
-### 3. Backup HF token, authenticate according to mode, derive IDs, and clone repo
+### 3. Backup HF token, authenticate according to login status/mode, derive IDs, and clone repo
 
 Before switching auth context, backup current local HF token state:
 
@@ -238,18 +255,13 @@ else
 fi
 ```
 
-If `hf_auth_mode=current-login`:
+If `HF_AUTH_LOGGED_IN=1` and `hf_auth_mode=current-login`:
 
 ```bash
 hf auth whoami
 ```
 
-If not logged in, guide user to create a write token at `https://huggingface.co/settings/tokens`, then login:
-
-```bash
-hf auth login --token <HF_WRITE_TOKEN>
-hf auth whoami
-```
+If this check unexpectedly fails, switch to the `HF_AUTH_LOGGED_IN=0` path and request `HF_TOKEN` from user.
 
 Then derive `HF_TOKEN` from local HF CLI credentials:
 
@@ -257,7 +269,7 @@ Then derive `HF_TOKEN` from local HF CLI credentials:
 HF_TOKEN="$(cat "$HF_TOKEN_FILE")"
 ```
 
-If `hf_auth_mode=new-token`:
+If `HF_AUTH_LOGGED_IN=0`, or if `HF_AUTH_LOGGED_IN=1` and `hf_auth_mode=new-token`:
 
 ```bash
 HF_TOKEN="<USER_PROVIDED_HF_TOKEN>"
