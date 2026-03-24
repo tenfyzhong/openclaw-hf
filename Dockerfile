@@ -23,29 +23,6 @@ RUN apt-get update && \
       tar && \
     rm -rf /var/lib/apt/lists/*
 
-RUN curl -fsSL https://openclaw.ai/install.sh | bash -s -- --no-onboard --version "${OPENCLAW_VERSION}"
-
-RUN /bin/bash -lc 'set -euo pipefail; \
-    OPENCLAW_BIN="$(command -v openclaw || true)"; \
-    if [[ -z "$OPENCLAW_BIN" && -x /root/.npm-global/bin/openclaw ]]; then \
-      OPENCLAW_BIN=/root/.npm-global/bin/openclaw; \
-    fi; \
-    if [[ -z "$OPENCLAW_BIN" && -x /root/.local/bin/openclaw ]]; then \
-      OPENCLAW_BIN=/root/.local/bin/openclaw; \
-    fi; \
-    if [[ -z "$OPENCLAW_BIN" ]]; then \
-      echo "openclaw command not found after installer" >&2; \
-      exit 1; \
-    fi; \
-    ln -sf "$OPENCLAW_BIN" /usr/local/bin/openclaw; \
-    openclaw --help >/dev/null'
-
-RUN python3 -m pip install --no-cache-dir --break-system-packages "huggingface_hub[cli]>=0.31.1"
-
-RUN curl -sSf https://sshx.io/get | sh && \
-    if [ -x /root/.local/bin/sshx ]; then ln -sf /root/.local/bin/sshx /usr/local/bin/sshx; fi && \
-    sshx --help >/dev/null
-
 RUN if ! getent group ubuntu >/dev/null; then \
       groupadd --system ubuntu || groupadd ubuntu; \
     fi && \
@@ -56,6 +33,32 @@ RUN if ! getent group ubuntu >/dev/null; then \
     mkdir -p /etc/sudoers.d && \
     printf '%s\n' 'ubuntu ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/90-ubuntu-nopasswd && \
     chmod 0440 /etc/sudoers.d/90-ubuntu-nopasswd
+
+RUN HOME=/home/ubuntu gosu ubuntu /bin/bash -lc \
+    "curl -fsSL https://openclaw.ai/install.sh | bash -s -- --no-onboard --version \"${OPENCLAW_VERSION}\""
+
+USER ubuntu
+
+RUN /bin/bash -lc 'set -euo pipefail; \
+    OPENCLAW_BIN="$(command -v openclaw || true)"; \
+    if [[ -z "$OPENCLAW_BIN" && -x /home/ubuntu/.npm-global/bin/openclaw ]]; then \
+      OPENCLAW_BIN=/home/ubuntu/.npm-global/bin/openclaw; \
+    fi; \
+    if [[ -z "$OPENCLAW_BIN" && -x /home/ubuntu/.local/bin/openclaw ]]; then \
+      OPENCLAW_BIN=/home/ubuntu/.local/bin/openclaw; \
+    fi; \
+    if [[ -z "$OPENCLAW_BIN" ]]; then \
+      echo "openclaw command not found after installer" >&2; \
+      exit 1; \
+    fi; \
+    ln -sf "$OPENCLAW_BIN" /usr/local/bin/openclaw; \
+    openclaw --help >/dev/null'
+
+RUN python3 -m pip install --no-cache-dir --break-system-packages "huggingface_hub[cli]>=0.31.1"
+
+RUN HOME=/home/ubuntu gosu ubuntu /bin/bash -lc "curl -sSf https://sshx.io/get | sh" && \
+    if [ -x /home/ubuntu/.local/bin/sshx ]; then ln -sf /home/ubuntu/.local/bin/sshx /usr/local/bin/sshx; fi && \
+    sshx --help >/dev/null
 
 WORKDIR /opt/openclaw-hf
 

@@ -304,7 +304,8 @@ write_backup_env_file() {
   for key in "${keys[@]}"; do
     printf '%s=%q\n' "$key" "${!key:-}" >> /etc/openclaw-backup.env
   done
-  chmod 600 /etc/openclaw-backup.env
+  chown "$OPENCLAW_USER:$OPENCLAW_GROUP" /etc/openclaw-backup.env
+  chmod 640 /etc/openclaw-backup.env
 }
 
 setup_backup_cron() {
@@ -322,10 +323,11 @@ setup_backup_cron() {
   cat > /etc/cron.d/openclaw-backup <<EOFCRON
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-${OPENCLAW_BACKUP_CRON} root /usr/local/bin/openclaw-backup-cron.sh >> /var/log/openclaw/backup.log 2>&1
+${OPENCLAW_BACKUP_CRON} ${OPENCLAW_USER} /usr/local/bin/openclaw-backup-cron.sh >> /var/log/openclaw/backup.log 2>&1
 EOFCRON
   chmod 0644 /etc/cron.d/openclaw-backup
   touch /var/log/openclaw/backup.log
+  chown "$OPENCLAW_USER:$OPENCLAW_GROUP" /var/log/openclaw/backup.log
 
   if pgrep -x cron >/dev/null 2>&1; then
     return 0
