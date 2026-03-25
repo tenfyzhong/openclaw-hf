@@ -4,6 +4,7 @@ FROM ubuntu:24.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG OPENCLAW_VERSION=latest
+ENV OPENCLAW_VERSION=${OPENCLAW_VERSION}
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \

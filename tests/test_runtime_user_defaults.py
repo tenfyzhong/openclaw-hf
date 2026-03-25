@@ -17,6 +17,8 @@ class RuntimeUserDefaultsTests(unittest.TestCase):
 
     def test_dockerfile_defaults_to_root_runtime_home(self):
         dockerfile = self._dockerfile_path().read_text(encoding="utf-8")
+        self.assertIn("ARG OPENCLAW_VERSION=latest", dockerfile)
+        self.assertIn("ENV OPENCLAW_VERSION=${OPENCLAW_VERSION}", dockerfile)
         self.assertIn("ENV HOME=/root", dockerfile)
         self.assertIn("ENV OPENCLAW_HOME=/root", dockerfile)
         self.assertIn("ENV OPENCLAW_USER=root", dockerfile)
