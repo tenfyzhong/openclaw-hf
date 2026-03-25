@@ -335,7 +335,10 @@ main() {
 
   space_name="$(prompt_required "Space name (without username)" "openclaw-hf")"
   dataset_name="$(prompt_required "Dataset name (without username)" "${space_name}-backup")"
-  default_openclaw_version="$(resolve_latest_openclaw_version)"
+  default_openclaw_version="$(trim "${OPENCLAW_VERSION:-}")"
+  if [[ -z "$default_openclaw_version" ]]; then
+    default_openclaw_version="$(resolve_latest_openclaw_version)"
+  fi
   openclaw_version="$(prompt_required "OPENCLAW_VERSION (press Enter to use detected latest)" "$default_openclaw_version")"
   space_repo_id="${hf_username}/${space_name}"
   dataset_repo_id="${hf_username}/${dataset_name}"

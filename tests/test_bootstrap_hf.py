@@ -275,6 +275,55 @@ class BootstrapHfScriptTests(unittest.TestCase):
                 result.stderr,
             )
 
+    def test_prefers_user_configured_openclaw_version_from_env(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            home_dir = tmp_path / "home"
+            token_file = home_dir / ".cache" / "huggingface" / "token"
+            bin_dir = tmp_path / "bin"
+            trace_file = tmp_path / "trace.log"
+
+            bin_dir.mkdir(parents=True)
+            token_file.parent.mkdir(parents=True)
+            token_file.write_text("hf-current-token\n", encoding="utf-8")
+            trace_file.write_text("", encoding="utf-8")
+            self._prepare_fake_tools(bin_dir)
+
+            env = os.environ.copy()
+            env.update(
+                {
+                    "HOME": str(home_dir),
+                    "TRACE_FILE": str(trace_file),
+                    "OPENCLAW_VERSION": "2026.3.23-2",
+                    "PATH": f"{bin_dir}:{env.get('PATH', '')}",
+                }
+            )
+
+            # space_name, dataset_name, openclaw_version(blank -> use env default),
+            # gateway token/password/HF token(blank), configure_llm(no),
+            # sshx_auto_start(yes), restart_space(no)
+            user_input = "demo-space\ndemo-backup\n\n\n\n\nn\ny\nn\n"
+
+            result = subprocess.run(
+                [str(self._script_path())],
+                cwd=self._repo_root(),
+                env=env,
+                input=user_input,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(
+                result.returncode,
+                0,
+                msg=f"stdout:\n{result.stdout}\n\nstderr:\n{result.stderr}",
+            )
+
+            trace = trace_file.read_text(encoding="utf-8")
+            self.assertIn("space-variable OPENCLAW_VERSION=2026.3.23-2", trace)
+            self.assertIn("OPENCLAW_VERSION: 2026.3.23-2", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
