@@ -20,15 +20,15 @@ class FakeApi:
 
 
 class BackupTests(unittest.TestCase):
-    def test_from_env_defaults_to_ubuntu_paths(self):
+    def test_from_env_defaults_to_root_paths(self):
         env = {
             "OPENCLAW_BACKUP_DATASET_REPO": "user/demo-backup",
         }
         with mock.patch.dict("os.environ", env, clear=True):
             config = BackupConfig.from_env()
 
-        self.assertEqual(config.state_dir, Path("/home/ubuntu/.openclaw").resolve())
-        self.assertEqual(config.backup_source_dir, Path("/home/ubuntu").resolve())
+        self.assertEqual(config.state_dir, Path("/root/.openclaw").resolve())
+        self.assertEqual(config.backup_source_dir, Path("/root").resolve())
 
     def test_from_env_uses_explicit_backup_source_dir(self):
         with tempfile.TemporaryDirectory() as tmp:

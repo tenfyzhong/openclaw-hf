@@ -54,8 +54,8 @@ class BackupConfig:
         if not dataset_repo:
             raise ValueError("OPENCLAW_BACKUP_DATASET_REPO is not set")
 
-        state_dir = Path(os.getenv("OPENCLAW_STATE_DIR", "/home/ubuntu/.openclaw")).resolve()
-        backup_source_dir = Path(os.getenv("OPENCLAW_BACKUP_SOURCE_DIR", "/home/ubuntu")).resolve()
+        state_dir = Path(os.getenv("OPENCLAW_STATE_DIR", "/root/.openclaw")).resolve()
+        backup_source_dir = Path(os.getenv("OPENCLAW_BACKUP_SOURCE_DIR", "/root")).resolve()
         work_dir = Path(os.getenv("OPENCLAW_BACKUP_WORK_DIR", "/tmp/openclaw-backup")).resolve()
         repo_type = (os.getenv("OPENCLAW_BACKUP_REPO_TYPE") or "dataset").strip() or "dataset"
         path_prefix = (os.getenv("OPENCLAW_BACKUP_PATH_PREFIX") or "backups").strip("/")
