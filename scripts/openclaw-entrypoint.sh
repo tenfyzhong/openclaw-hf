@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-OPENCLAW_USER="${OPENCLAW_USER:-ubuntu}"
-OPENCLAW_GROUP="${OPENCLAW_GROUP:-ubuntu}"
-OPENCLAW_HOME="${OPENCLAW_HOME:-/home/ubuntu}"
-OPENCLAW_STATE_DIR="${OPENCLAW_STATE_DIR:-/home/ubuntu/.openclaw}"
+OPENCLAW_USER="${OPENCLAW_USER:-root}"
+OPENCLAW_GROUP="${OPENCLAW_GROUP:-root}"
+OPENCLAW_HOME="${OPENCLAW_HOME:-/root}"
+OPENCLAW_STATE_DIR="${OPENCLAW_STATE_DIR:-/root/.openclaw}"
 OPENCLAW_CONFIG_PATH="${OPENCLAW_CONFIG_PATH:-${OPENCLAW_STATE_DIR}/openclaw.json}"
 OPENCLAW_WORKSPACE_DIR="${OPENCLAW_WORKSPACE_DIR:-${OPENCLAW_STATE_DIR}/workspace}"
 OPENCLAW_GATEWAY_BIND="${OPENCLAW_GATEWAY_BIND:-lan}"
@@ -18,7 +18,8 @@ OPENCLAW_LLM_BASE_URL_ENV="${OPENCLAW_LLM_BASE_URL_ENV:-OPENCLAW_LLM_BASE_URL}"
 OPENCLAW_LLM_API_KEY_ENV="${OPENCLAW_LLM_API_KEY_ENV:-OPENCLAW_LLM_API_KEY}"
 OPENCLAW_BACKUP_ENABLED="${OPENCLAW_BACKUP_ENABLED:-true}"
 OPENCLAW_BACKUP_CRON="${OPENCLAW_BACKUP_CRON:-*/30 * * * *}"
-OPENCLAW_BACKUP_SOURCE_DIR="${OPENCLAW_BACKUP_SOURCE_DIR:-/home/ubuntu}"
+OPENCLAW_BACKUP_SOURCE_DIR="${OPENCLAW_BACKUP_SOURCE_DIR:-/root}"
+OPENCLAW_BACKUP_ENV_FILE_PATH="${OPENCLAW_BACKUP_ENV_FILE_PATH:-/etc/openclaw-backup.env}"
 OPENCLAW_STDOUT_LOG_PATH="${OPENCLAW_STDOUT_LOG_PATH:-/var/log/openclaw/gateway.stdout.log}"
 OPENCLAW_STDERR_LOG_PATH="${OPENCLAW_STDERR_LOG_PATH:-/var/log/openclaw/gateway.stderr.log}"
 OPENCLAW_SSHX_AUTO_START="${OPENCLAW_SSHX_AUTO_START:-false}"
@@ -32,6 +33,7 @@ export HOME="$OPENCLAW_HOME"
 export OPENCLAW_HOME
 export OPENCLAW_STATE_DIR
 export OPENCLAW_CONFIG_PATH
+export OPENCLAW_BACKUP_ENV_FILE_PATH
 
 is_true() {
   local value
@@ -61,14 +63,27 @@ mkdir_state_dirs() {
 }
 
 fix_permissions() {
+  local path
+
   if [[ "$(id -u)" -ne 0 ]]; then
     return 0
   fi
 
-  chown "$OPENCLAW_USER:$OPENCLAW_GROUP" "$OPENCLAW_HOME" "$OPENCLAW_STATE_DIR" "$OPENCLAW_WORKSPACE_DIR"
-  chown "$OPENCLAW_USER:$OPENCLAW_GROUP" "$OPENCLAW_STDOUT_LOG_PATH" "$OPENCLAW_STDERR_LOG_PATH"
-  chown "$OPENCLAW_USER:$OPENCLAW_GROUP" "$(dirname "$OPENCLAW_STDOUT_LOG_PATH")" "$(dirname "$OPENCLAW_STDERR_LOG_PATH")"
-  find "$OPENCLAW_HOME" -xdev -exec chown "$OPENCLAW_USER:$OPENCLAW_GROUP" {} +
+  if [[ -e "$OPENCLAW_HOME" ]]; then
+    chown "$OPENCLAW_USER:$OPENCLAW_GROUP" "$OPENCLAW_HOME"
+  fi
+
+  for path in \
+    "$OPENCLAW_STATE_DIR" \
+    "$OPENCLAW_WORKSPACE_DIR" \
+    "$OPENCLAW_STDOUT_LOG_PATH" \
+    "$OPENCLAW_STDERR_LOG_PATH" \
+    "$(dirname "$OPENCLAW_STDOUT_LOG_PATH")" \
+    "$(dirname "$OPENCLAW_STDERR_LOG_PATH")"; do
+    if [[ -e "$path" ]]; then
+      chown -R "$OPENCLAW_USER:$OPENCLAW_GROUP" "$path"
+    fi
+  done
 }
 
 write_or_update_config() {
@@ -287,6 +302,7 @@ PY
 }
 
 write_backup_env_file() {
+  local backup_env_file
   local keys=(
     HF_TOKEN
     HUGGINGFACE_HUB_TOKEN
@@ -300,15 +316,37 @@ write_backup_env_file() {
     OPENCLAW_STATE_DIR
   )
 
-  : > /etc/openclaw-backup.env
+  backup_env_file="${OPENCLAW_BACKUP_ENV_FILE_PATH:-/etc/openclaw-backup.env}"
+  if [[ "$(id -u)" -ne 0 && "$backup_env_file" == "/etc/openclaw-backup.env" ]]; then
+    backup_env_file="${OPENCLAW_STATE_DIR}/openclaw-backup.env"
+  fi
+
+  mkdir -p "$(dirname "$backup_env_file")"
+  if ! : > "$backup_env_file"; then
+    echo "openclaw: cannot write backup env file at $backup_env_file" >&2
+    return 1
+  fi
+
   for key in "${keys[@]}"; do
-    printf '%s=%q\n' "$key" "${!key:-}" >> /etc/openclaw-backup.env
+    printf '%s=%q\n' "$key" "${!key:-}" >> "$backup_env_file"
   done
-  chown "$OPENCLAW_USER:$OPENCLAW_GROUP" /etc/openclaw-backup.env
-  chmod 640 /etc/openclaw-backup.env
+  OPENCLAW_BACKUP_ENV_FILE_PATH="$backup_env_file"
+  export OPENCLAW_BACKUP_ENV_FILE_PATH
+
+  if [[ "$(id -u)" -eq 0 ]]; then
+    chown "$OPENCLAW_USER:$OPENCLAW_GROUP" "$backup_env_file"
+    chmod 640 "$backup_env_file"
+  else
+    chmod 600 "$backup_env_file"
+  fi
 }
 
 setup_backup_cron() {
+  if [[ "$(id -u)" -ne 0 ]]; then
+    echo "openclaw: backup cron requires root; skip cron setup" >&2
+    return 0
+  fi
+
   if ! is_true "$OPENCLAW_BACKUP_ENABLED"; then
     return 0
   fi
@@ -318,11 +356,15 @@ setup_backup_cron() {
     return 0
   fi
 
-  write_backup_env_file
+  if ! write_backup_env_file; then
+    echo "openclaw: backup env file unavailable; skip cron setup" >&2
+    return 0
+  fi
 
   cat > /etc/cron.d/openclaw-backup <<EOFCRON
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+OPENCLAW_BACKUP_ENV_FILE_PATH=${OPENCLAW_BACKUP_ENV_FILE_PATH}
 ${OPENCLAW_BACKUP_CRON} ${OPENCLAW_USER} /usr/local/bin/openclaw-backup-cron.sh >> /var/log/openclaw/backup.log 2>&1
 EOFCRON
   chmod 0644 /etc/cron.d/openclaw-backup
@@ -342,7 +384,10 @@ restore_from_backup_on_startup() {
     return 0
   fi
 
-  write_backup_env_file
+  if ! write_backup_env_file; then
+    echo "openclaw: backup env file unavailable; skip startup restore" >&2
+    return 0
+  fi
   if /usr/local/bin/openclaw-restore.sh; then
     echo "openclaw: restore finished"
   else
@@ -368,16 +413,6 @@ run_as_node_background() {
   OPENCLAW_CHILD_PID="$!"
 }
 
-run_as_node_background_stdout() {
-  local cmd=("$@")
-  if [[ "$(id -u)" -eq 0 ]]; then
-    gosu "$OPENCLAW_USER:$OPENCLAW_GROUP" "${cmd[@]}" &
-  else
-    "${cmd[@]}" &
-  fi
-  echo "$!"
-}
-
 start_sshx_background() {
   if ! is_true "$OPENCLAW_SSHX_AUTO_START"; then
     return 0
@@ -388,8 +423,13 @@ start_sshx_background() {
     return 0
   fi
 
-  OPENCLAW_SSHX_PID="$(run_as_node_background_stdout sshx)"
-  echo "openclaw: sshx started in background (pid=$OPENCLAW_SSHX_PID); sshx output is on stdout/stderr"
+  if [[ "$(id -u)" -eq 0 ]]; then
+    gosu "$OPENCLAW_USER:$OPENCLAW_GROUP" sshx >>"$OPENCLAW_STDOUT_LOG_PATH" 2>>"$OPENCLAW_STDERR_LOG_PATH" &
+  else
+    sshx >>"$OPENCLAW_STDOUT_LOG_PATH" 2>>"$OPENCLAW_STDERR_LOG_PATH" &
+  fi
+  OPENCLAW_SSHX_PID="$!"
+  echo "openclaw: sshx started in background (pid=$OPENCLAW_SSHX_PID)"
 }
 
 stop_sshx_background() {
@@ -411,7 +451,10 @@ backup_on_shutdown() {
     return 0
   fi
 
-  write_backup_env_file
+  if ! write_backup_env_file; then
+    echo "openclaw: backup env file unavailable; skip shutdown backup" >&2
+    return 0
+  fi
   echo "openclaw: running shutdown backup"
   if /usr/local/bin/openclaw-backup-cron.sh; then
     echo "openclaw: shutdown backup completed"

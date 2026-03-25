@@ -19,30 +19,18 @@ RUN apt-get update && \
       procps \
       python3 \
       python3-pip \
-      sudo \
       tar && \
     rm -rf /var/lib/apt/lists/*
 
-RUN if ! getent group ubuntu >/dev/null; then \
-      groupadd --system ubuntu || groupadd ubuntu; \
-    fi && \
-    if ! id -u ubuntu >/dev/null 2>&1; then \
-      useradd --system --create-home --gid ubuntu --shell /bin/bash ubuntu || \
-      useradd --create-home --gid ubuntu --shell /bin/bash ubuntu; \
-    fi && \
-    mkdir -p /etc/sudoers.d && \
-    printf '%s\n' 'ubuntu ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/90-ubuntu-nopasswd && \
-    chmod 0440 /etc/sudoers.d/90-ubuntu-nopasswd
-
-RUN HOME=/home/ubuntu gosu ubuntu /bin/bash -lc \
+RUN HOME=/root /bin/bash -lc \
     "curl -fsSL https://openclaw.ai/install.sh | bash -s -- --no-onboard --version \"${OPENCLAW_VERSION}\""
 
 RUN /bin/bash -lc 'set -euo pipefail; \
     OPENCLAW_BIN=""; \
-    if [[ -x /home/ubuntu/.npm-global/bin/openclaw ]]; then \
-      OPENCLAW_BIN=/home/ubuntu/.npm-global/bin/openclaw; \
-    elif [[ -x /home/ubuntu/.local/bin/openclaw ]]; then \
-      OPENCLAW_BIN=/home/ubuntu/.local/bin/openclaw; \
+    if [[ -x /root/.npm-global/bin/openclaw ]]; then \
+      OPENCLAW_BIN=/root/.npm-global/bin/openclaw; \
+    elif [[ -x /root/.local/bin/openclaw ]]; then \
+      OPENCLAW_BIN=/root/.local/bin/openclaw; \
     fi; \
     if [[ -z "$OPENCLAW_BIN" ]]; then \
       echo "openclaw command not found after installer" >&2; \
@@ -53,8 +41,8 @@ RUN /bin/bash -lc 'set -euo pipefail; \
 
 RUN python3 -m pip install --no-cache-dir --break-system-packages "huggingface_hub[cli]>=0.31.1"
 
-RUN HOME=/home/ubuntu gosu ubuntu /bin/bash -lc "curl -sSf https://sshx.io/get | sh" && \
-    if [ -x /home/ubuntu/.local/bin/sshx ]; then ln -sf /home/ubuntu/.local/bin/sshx /usr/local/bin/sshx; fi && \
+RUN HOME=/root /bin/bash -lc "curl -sSf https://sshx.io/get | sh" && \
+    if [ -x /root/.local/bin/sshx ]; then ln -sf /root/.local/bin/sshx /usr/local/bin/sshx; fi && \
     sshx --help >/dev/null
 
 WORKDIR /opt/openclaw-hf
@@ -65,18 +53,17 @@ COPY scripts/openclaw-backup-cron.sh /usr/local/bin/openclaw-backup-cron.sh
 COPY scripts/openclaw-restore.sh /usr/local/bin/openclaw-restore.sh
 
 RUN chmod 755 /usr/local/bin/openclaw-entrypoint.sh /usr/local/bin/openclaw-backup-cron.sh /usr/local/bin/openclaw-restore.sh && \
-    mkdir -p /home/ubuntu/.openclaw/workspace /var/log/openclaw && \
-    chown -R ubuntu:ubuntu /var/log/openclaw /home/ubuntu
+    mkdir -p /root/.openclaw/workspace /var/log/openclaw
 
 ENV NODE_ENV=production
 ENV PYTHONUNBUFFERED=1
-ENV HOME=/home/ubuntu
-ENV OPENCLAW_HOME=/home/ubuntu
-ENV OPENCLAW_USER=ubuntu
-ENV OPENCLAW_GROUP=ubuntu
-ENV OPENCLAW_STATE_DIR=/home/ubuntu/.openclaw
-ENV OPENCLAW_WORKSPACE_DIR=/home/ubuntu/.openclaw/workspace
-ENV OPENCLAW_CONFIG_PATH=/home/ubuntu/.openclaw/openclaw.json
+ENV HOME=/root
+ENV OPENCLAW_HOME=/root
+ENV OPENCLAW_USER=root
+ENV OPENCLAW_GROUP=root
+ENV OPENCLAW_STATE_DIR=/root/.openclaw
+ENV OPENCLAW_WORKSPACE_DIR=/root/.openclaw/workspace
+ENV OPENCLAW_CONFIG_PATH=/root/.openclaw/openclaw.json
 ENV OPENCLAW_GATEWAY_BIND=lan
 ENV OPENCLAW_GATEWAY_PORT=7860
 ENV OPENCLAW_INIT_GATEWAY_MODE=local
@@ -88,7 +75,7 @@ ENV OPENCLAW_LLM_PROVIDER=thirdparty
 ENV OPENCLAW_LLM_API=openai-completions
 ENV OPENCLAW_BACKUP_ENABLED=true
 ENV OPENCLAW_BACKUP_CRON="*/30 * * * *"
-ENV OPENCLAW_BACKUP_SOURCE_DIR=/home/ubuntu
+ENV OPENCLAW_BACKUP_SOURCE_DIR=/root
 ENV OPENCLAW_SSHX_AUTO_START=false
 ENV OPENCLAW_BACKUP_PRIVATE=true
 ENV OPENCLAW_BACKUP_PATH_PREFIX=backups
