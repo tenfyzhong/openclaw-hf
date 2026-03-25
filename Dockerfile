@@ -26,10 +26,10 @@ RUN HOME=/root /bin/bash -lc \
     "curl -fsSL https://openclaw.ai/install.sh | bash -s -- --no-onboard --version \"${OPENCLAW_VERSION}\""
 
 RUN /bin/bash -lc 'set -euo pipefail; \
-    OPENCLAW_BIN=""; \
-    if [[ -x /root/.npm-global/bin/openclaw ]]; then \
+    OPENCLAW_BIN="$(command -v openclaw || true)"; \
+    if [[ -z "$OPENCLAW_BIN" ]] && [[ -x /root/.npm-global/bin/openclaw ]]; then \
       OPENCLAW_BIN=/root/.npm-global/bin/openclaw; \
-    elif [[ -x /root/.local/bin/openclaw ]]; then \
+    elif [[ -z "$OPENCLAW_BIN" ]] && [[ -x /root/.local/bin/openclaw ]]; then \
       OPENCLAW_BIN=/root/.local/bin/openclaw; \
     fi; \
     if [[ -z "$OPENCLAW_BIN" ]]; then \
