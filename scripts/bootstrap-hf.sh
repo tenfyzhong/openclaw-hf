@@ -49,7 +49,7 @@ prompt_required() {
     value="$(prompt_line "$prompt" "$default_value")"
     value="$(trim "$value")"
     if [[ -z "$value" ]]; then
-      info "This value is required."
+      printf 'This value is required.\n' >&2
     fi
   done
   printf '%s' "$value"
@@ -61,7 +61,7 @@ prompt_secret_optional() {
 
   if [[ -t 0 ]]; then
     read -r -s -p "$prompt: " value || true
-    printf '\n'
+    printf '\n' >&2
   else
     read -r -p "$prompt: " value || true
   fi
@@ -96,7 +96,7 @@ prompt_yes_no() {
         return 0
         ;;
       *)
-        info "Please enter y or n."
+        printf 'Please enter y or n.\n' >&2
         ;;
     esac
   done
@@ -154,14 +154,31 @@ read_current_hf_token() {
 get_hf_username() {
   local whoami_output
   local username
+  local token_from_cache
 
-  whoami_output="$(hf auth whoami)"
-  username="$(printf '%s\n' "$whoami_output" | awk '/^user:/{print $2; exit}')"
+  whoami_output="$(hf auth whoami 2>&1 || true)"
+  username="$(printf '%s\n' "$whoami_output" | sed -nE 's/^[[:space:]]*user:[[:space:]]*([^[:space:]]+).*$/\1/p' | head -n 1)"
   if [[ -z "$username" ]]; then
-    username="$(printf '%s\n' "$whoami_output" | awk '{print $2; exit}')"
+    username="$(printf '%s\n' "$whoami_output" | sed -nE 's/.*[Ll]ogged in as[[:space:]]+([^[:space:]]+).*$/\1/p' | head -n 1)"
+  fi
+  if [[ -z "$username" ]]; then
+    token_from_cache="$(read_current_hf_token)"
+    if [[ -n "$token_from_cache" ]]; then
+      username="$(
+        HF_API_TOKEN="$token_from_cache" python3 - <<'PY' 2>/dev/null || true
+from huggingface_hub import HfApi
+import os
+
+token = (os.environ.get("HF_API_TOKEN") or "").strip() or None
+api = HfApi(token=token)
+data = api.whoami(token=token)
+name = data.get("name", "") if isinstance(data, dict) else ""
+print((name or "").strip())
+PY
+      )"
+    fi
   fi
   username="$(printf '%s' "$username" | tr -d '\r\n')"
-  [[ -n "$username" ]] || die "Cannot parse username from 'hf auth whoami' output."
   printf '%s' "$username"
 }
 
@@ -181,11 +198,16 @@ import os
 
 token = (os.environ.get("HF_API_TOKEN") or "").strip() or None
 api = HfApi(token=token)
-api.add_space_variable(
-    repo_id=os.environ["SPACE_REPO_ID"],
-    key=os.environ["SPACE_VARIABLE_KEY"],
-    value=os.environ["SPACE_VARIABLE_VALUE"],
-)
+try:
+    api.add_space_variable(
+        repo_id=os.environ["SPACE_REPO_ID"],
+        key=os.environ["SPACE_VARIABLE_KEY"],
+        value=os.environ["SPACE_VARIABLE_VALUE"],
+    )
+except Exception as exc:
+    key = os.environ.get("SPACE_VARIABLE_KEY", "")
+    repo_id = os.environ.get("SPACE_REPO_ID", "")
+    raise SystemExit(f"failed to set space variable {key} on {repo_id}: {exc}")
 PY
 }
 
@@ -205,11 +227,16 @@ import os
 
 token = (os.environ.get("HF_API_TOKEN") or "").strip() or None
 api = HfApi(token=token)
-api.add_space_secret(
-    repo_id=os.environ["SPACE_REPO_ID"],
-    key=os.environ["SPACE_SECRET_KEY"],
-    value=os.environ["SPACE_SECRET_VALUE"],
-)
+try:
+    api.add_space_secret(
+        repo_id=os.environ["SPACE_REPO_ID"],
+        key=os.environ["SPACE_SECRET_KEY"],
+        value=os.environ["SPACE_SECRET_VALUE"],
+    )
+except Exception as exc:
+    key = os.environ.get("SPACE_SECRET_KEY", "")
+    repo_id = os.environ.get("SPACE_REPO_ID", "")
+    raise SystemExit(f"failed to set space secret {key} on {repo_id}: {exc}")
 PY
 }
 
@@ -225,7 +252,11 @@ import os
 
 token = (os.environ.get("HF_API_TOKEN") or "").strip() or None
 api = HfApi(token=token)
-api.restart_space(repo_id=os.environ["SPACE_RESTART_REPO_ID"])
+try:
+    api.restart_space(repo_id=os.environ["SPACE_RESTART_REPO_ID"])
+except Exception as exc:
+    repo_id = os.environ.get("SPACE_RESTART_REPO_ID", "")
+    raise SystemExit(f"failed to restart space {repo_id}: {exc}")
 PY
 }
 
@@ -268,6 +299,10 @@ main() {
   fi
 
   hf_username="$(get_hf_username)"
+  hf_username="$(trim "$hf_username")"
+  if [[ -z "$hf_username" ]]; then
+    hf_username="$(prompt_required "HF username (cannot parse from hf auth whoami)")"
+  fi
   info "HF user: $hf_username"
 
   space_name="$(prompt_required "Space name (without username)" "openclaw-hf")"
@@ -337,7 +372,9 @@ main() {
 
   if [[ "$restart_now" == "yes" ]]; then
     info "Restarting Space..."
-    restart_space "$space_repo_id" "$api_token"
+    if ! restart_space "$space_repo_id" "$api_token"; then
+      error "Space restart failed. You can restart manually from Hugging Face Space Settings."
+    fi
   fi
 
   space_host="${space_repo_id/\//-}.hf.space"

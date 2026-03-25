@@ -29,7 +29,11 @@ class BootstrapHfScriptTests(unittest.TestCase):
                 set -euo pipefail
                 echo "hf $*" >>"${TRACE_FILE}"
                 if [[ "${1:-}" == "auth" && "${2:-}" == "whoami" ]]; then
-                  echo "user:  demo-user"
+                  if [[ -n "${HF_WHOAMI_OUTPUT:-}" ]]; then
+                    echo "${HF_WHOAMI_OUTPUT}"
+                  else
+                    echo "user:  demo-user"
+                  fi
                   exit 0
                 fi
                 if [[ "${1:-}" == "auth" && "${2:-}" == "login" ]]; then
@@ -69,6 +73,10 @@ class BootstrapHfScriptTests(unittest.TestCase):
                 fi
                 if [[ -n "${SPACE_RESTART_REPO_ID:-}" ]]; then
                   echo "space-restart ${SPACE_RESTART_REPO_ID}" >>"${TRACE_FILE}"
+                  if [[ "${FAIL_SPACE_RESTART:-0}" == "1" ]]; then
+                    echo "restart failed" >&2
+                    exit 1
+                  fi
                 fi
                 exit 0
                 """
@@ -169,6 +177,101 @@ class BootstrapHfScriptTests(unittest.TestCase):
 
             self.assertIn("Generated OPENCLAW_GATEWAY_TOKEN=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", result.stdout)
             self.assertIn("Generated OPENCLAW_GATEWAY_PASSWORD=bbbbbbbbbbbbbbbb", result.stdout)
+
+    def test_prompts_for_hf_username_when_whoami_output_is_unparseable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            home_dir = tmp_path / "home"
+            token_file = home_dir / ".cache" / "huggingface" / "token"
+            bin_dir = tmp_path / "bin"
+            trace_file = tmp_path / "trace.log"
+
+            bin_dir.mkdir(parents=True)
+            token_file.parent.mkdir(parents=True)
+            token_file.write_text("hf-current-token\n", encoding="utf-8")
+            trace_file.write_text("", encoding="utf-8")
+            self._prepare_fake_tools(bin_dir)
+
+            env = os.environ.copy()
+            env.update(
+                {
+                    "HOME": str(home_dir),
+                    "TRACE_FILE": str(trace_file),
+                    "HF_WHOAMI_OUTPUT": "whoami output without username",
+                    "PATH": f"{bin_dir}:{env.get('PATH', '')}",
+                }
+            )
+
+            # hf_username (fallback prompt), space_name, dataset_name, gateway token/password/HF token(empty),
+            # configure_llm(no), sshx_auto_start(yes), restart_space(no)
+            user_input = "manual-user\ndemo-space\ndemo-backup\n\n\n\nn\ny\nn\n"
+
+            result = subprocess.run(
+                [str(self._script_path())],
+                cwd=self._repo_root(),
+                env=env,
+                input=user_input,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(
+                result.returncode,
+                0,
+                msg=f"stdout:\n{result.stdout}\n\nstderr:\n{result.stderr}",
+            )
+
+            trace = trace_file.read_text(encoding="utf-8")
+            self.assertIn("hf repo create manual-user/demo-space --repo-type space --space-sdk docker --private --exist-ok", trace)
+            self.assertIn("hf repo create manual-user/demo-backup --repo-type dataset --private --exist-ok", trace)
+            self.assertIn("HF user: manual-user", result.stdout)
+
+    def test_restart_failure_is_non_fatal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            home_dir = tmp_path / "home"
+            token_file = home_dir / ".cache" / "huggingface" / "token"
+            bin_dir = tmp_path / "bin"
+            trace_file = tmp_path / "trace.log"
+
+            bin_dir.mkdir(parents=True)
+            token_file.parent.mkdir(parents=True)
+            token_file.write_text("hf-current-token\n", encoding="utf-8")
+            trace_file.write_text("", encoding="utf-8")
+            self._prepare_fake_tools(bin_dir)
+
+            env = os.environ.copy()
+            env.update(
+                {
+                    "HOME": str(home_dir),
+                    "TRACE_FILE": str(trace_file),
+                    "FAIL_SPACE_RESTART": "1",
+                    "PATH": f"{bin_dir}:{env.get('PATH', '')}",
+                }
+            )
+
+            user_input = "demo-space\ndemo-backup\n\n\n\nn\ny\ny\n"
+
+            result = subprocess.run(
+                [str(self._script_path())],
+                cwd=self._repo_root(),
+                env=env,
+                input=user_input,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(
+                result.returncode,
+                0,
+                msg=f"stdout:\n{result.stdout}\n\nstderr:\n{result.stderr}",
+            )
+            self.assertIn(
+                "Space restart failed. You can restart manually from Hugging Face Space Settings.",
+                result.stderr,
+            )
 
 
 if __name__ == "__main__":
