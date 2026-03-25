@@ -135,6 +135,32 @@ ensure_huggingface_hub_py() {
   python3 -c "import huggingface_hub" >/dev/null 2>&1 || die "python3 package 'huggingface_hub' is required. Install with: python3 -m pip install --user 'huggingface_hub[cli]'"
 }
 
+resolve_latest_openclaw_version() {
+  local version
+  version="$(
+    python3 - <<'PY' 2>/dev/null || true
+import json
+import urllib.request
+
+url = "https://registry.npmjs.org/openclaw/latest"
+try:
+    with urllib.request.urlopen(url, timeout=8) as response:
+        payload = response.read().decode("utf-8", errors="replace")
+    data = json.loads(payload)
+    version = str(data.get("version", "")).strip()
+    if version:
+        print(version)
+except Exception:
+    pass
+PY
+  )"
+  version="$(trim "$version")"
+  if [[ -z "$version" ]]; then
+    version="latest"
+  fi
+  printf '%s' "$version"
+}
+
 read_current_hf_token() {
   if [[ -n "${HUGGINGFACE_HUB_TOKEN:-}" ]]; then
     printf '%s' "${HUGGINGFACE_HUB_TOKEN}" | tr -d '\r\n'
@@ -266,6 +292,8 @@ main() {
   local dataset_name
   local space_repo_id
   local dataset_repo_id
+  local default_openclaw_version
+  local openclaw_version
   local gateway_token
   local gateway_password
   local generated_gateway_token=0
@@ -307,6 +335,8 @@ main() {
 
   space_name="$(prompt_required "Space name (without username)" "openclaw-hf")"
   dataset_name="$(prompt_required "Dataset name (without username)" "${space_name}-backup")"
+  default_openclaw_version="$(resolve_latest_openclaw_version)"
+  openclaw_version="$(prompt_required "OPENCLAW_VERSION (press Enter to use detected latest)" "$default_openclaw_version")"
   space_repo_id="${hf_username}/${space_name}"
   dataset_repo_id="${hf_username}/${dataset_name}"
 
@@ -356,6 +386,7 @@ main() {
 
   info "Configuring Space variables and secrets..."
   set_space_variable "$space_repo_id" "OPENCLAW_BACKUP_DATASET_REPO" "$dataset_repo_id" "$api_token"
+  set_space_variable "$space_repo_id" "OPENCLAW_VERSION" "$openclaw_version" "$api_token"
   set_space_variable "$space_repo_id" "OPENCLAW_GATEWAY_CONTROLUI_ALLOW_INSECURE_AUTH" "true" "$api_token"
   set_space_variable "$space_repo_id" "OPENCLAW_GATEWAY_CONTROLUI_DANGEROUSLY_DISABLE_DEVICE_AUTH" "true" "$api_token"
   set_space_secret "$space_repo_id" "OPENCLAW_GATEWAY_TOKEN" "$gateway_token" "$api_token"
@@ -385,6 +416,7 @@ main() {
   info "Deployment complete."
   info "Space repo: $space_repo_id"
   info "Dataset repo: $dataset_repo_id"
+  info "OPENCLAW_VERSION: $openclaw_version"
   info "Space URL: $app_url"
   info "Health URL: $health_url"
 

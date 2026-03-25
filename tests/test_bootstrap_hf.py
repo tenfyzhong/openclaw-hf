@@ -140,10 +140,10 @@ class BootstrapHfScriptTests(unittest.TestCase):
                 }
             )
 
-            # space_name, dataset_name, gateway_token(blank), gateway_password(blank),
-            # HF_TOKEN(blank -> reuse current token), configure_llm(no),
-            # sshx_auto_start(yes), restart_space(yes)
-            user_input = "demo-space\ndemo-backup\n\n\n\nn\ny\ny\n"
+            # space_name, dataset_name, openclaw_version(blank -> default latest),
+            # gateway_token(blank), gateway_password(blank), HF_TOKEN(blank -> reuse current token),
+            # configure_llm(no), sshx_auto_start(yes), restart_space(yes)
+            user_input = "demo-space\ndemo-backup\n\n\n\n\nn\ny\ny\n"
 
             result = subprocess.run(
                 [str(self._script_path())],
@@ -167,6 +167,7 @@ class BootstrapHfScriptTests(unittest.TestCase):
             self.assertIn("hf upload demo-user/demo-space . --repo-type space --exclude .git/** --exclude .git --commit-message feat: deploy openclaw to hf space", trace)
 
             self.assertIn("space-variable OPENCLAW_BACKUP_DATASET_REPO=demo-user/demo-backup", trace)
+            self.assertIn("space-variable OPENCLAW_VERSION=latest", trace)
             self.assertIn("space-variable OPENCLAW_GATEWAY_CONTROLUI_ALLOW_INSECURE_AUTH=true", trace)
             self.assertIn("space-variable OPENCLAW_GATEWAY_CONTROLUI_DANGEROUSLY_DISABLE_DEVICE_AUTH=true", trace)
             self.assertIn("space-variable OPENCLAW_SSHX_AUTO_START=true", trace)
@@ -202,9 +203,10 @@ class BootstrapHfScriptTests(unittest.TestCase):
                 }
             )
 
-            # hf_username (fallback prompt), space_name, dataset_name, gateway token/password/HF token(empty),
+            # hf_username (fallback prompt), space_name, dataset_name, openclaw_version(blank),
+            # gateway token/password/HF token(empty),
             # configure_llm(no), sshx_auto_start(yes), restart_space(no)
-            user_input = "manual-user\ndemo-space\ndemo-backup\n\n\n\nn\ny\nn\n"
+            user_input = "manual-user\ndemo-space\ndemo-backup\n\n\n\n\nn\ny\nn\n"
 
             result = subprocess.run(
                 [str(self._script_path())],
@@ -251,7 +253,7 @@ class BootstrapHfScriptTests(unittest.TestCase):
                 }
             )
 
-            user_input = "demo-space\ndemo-backup\n\n\n\nn\ny\ny\n"
+            user_input = "demo-space\ndemo-backup\n\n\n\n\nn\ny\ny\n"
 
             result = subprocess.run(
                 [str(self._script_path())],

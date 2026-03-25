@@ -58,6 +58,7 @@ In that case, you can still configure from inside the container (for example via
 - `OPENCLAW_LLM_MODEL` (unset by default; used only when custom model preconfiguration is enabled)
 - `OPENCLAW_LLM_PROVIDER` (default: `thirdparty`)
 - `OPENCLAW_LLM_API` (default: `openai-completions`)
+- `OPENCLAW_VERSION` (used by Docker install step; bootstrap prompts for it and defaults to the latest version detected from npm registry, fallback `latest`)
 - `OPENCLAW_STATE_DIR` (default: `/root/.openclaw`)
 - `OPENCLAW_USER` (default: `root`, runtime user for gateway and cron jobs)
 - `OPENCLAW_GROUP` (default: `root`, runtime group for gateway and cron jobs)
@@ -84,11 +85,13 @@ Run the interactive bootstrap script from repo root:
 
 - Check/install `hf` CLI on macOS/Linux (`curl -LsSf https://hf.co/cli/install.sh | bash`)
 - Ensure HF login (`hf auth whoami` / `hf auth login`)
-- Ask for `space_name`, `dataset_name`, gateway token/password, and optional LLM settings
+- Ask for `space_name`, `dataset_name`, `OPENCLAW_VERSION`, gateway token/password, and optional LLM settings
+- Default `OPENCLAW_VERSION` to latest detected from npm registry (`openclaw`), fallback `latest` when detection fails
 - Auto-generate `OPENCLAW_GATEWAY_TOKEN` (32 chars) and `OPENCLAW_GATEWAY_PASSWORD` (16 chars) if left empty
 - Create private Space + Dataset and upload this repository
 - Configure Space `Variables and secrets` automatically, including:
   - `OPENCLAW_BACKUP_DATASET_REPO`
+  - `OPENCLAW_VERSION`
   - `HF_TOKEN`
   - `OPENCLAW_GATEWAY_TOKEN`
   - `OPENCLAW_GATEWAY_PASSWORD`
