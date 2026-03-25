@@ -101,7 +101,7 @@ ENV OPENCLAW_BACKUP_LATEST_NAME=latest-backup.tar.gz
 EXPOSE 7860
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=25s --retries=5 \
-  CMD python3 -c "import os,socket,sys;port=int(os.getenv('OPENCLAW_GATEWAY_PORT','7860'));s=socket.socket();s.settimeout(3);rc=s.connect_ex(('127.0.0.1',port));s.close();sys.exit(0 if rc==0 else 1)"
+  CMD /bin/bash -lc 'set -euo pipefail; URL="http://127.0.0.1:${OPENCLAW_GATEWAY_PORT:-7860}/healthz"; if [[ -n "${OPENCLAW_GATEWAY_TOKEN:-}" ]]; then curl -fsS --max-time 3 -H "x-openclaw-token: ${OPENCLAW_GATEWAY_TOKEN}" "$URL" >/dev/null; else curl -fsS --max-time 3 "$URL" >/dev/null; fi'
 
 ENTRYPOINT ["/usr/local/bin/openclaw-entrypoint.sh"]
 CMD ["gateway"]
