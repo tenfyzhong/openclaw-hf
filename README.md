@@ -27,7 +27,8 @@ This setup is designed to provide the following:
 - `openclaw_hf/backup.py`: Backup/restore implementation
 - `scripts/openclaw-backup-cron.sh`: Cron entrypoint for backup jobs
 - `scripts/openclaw-restore.sh`: Startup restore entrypoint
-- `scripts/bootstrap-hf.sh`: Interactive bootstrap for Space/Dataset creation, upload, and Space variables/secrets setup
+- `scripts/bootstrap-hf.sh`: Interactive bootstrap for Space/Dataset creation, upload, and Space variables/secrets setup (macOS/Linux)
+- `scripts/bootstrap-hf.ps1`: Interactive bootstrap for Space/Dataset creation, upload, and Space variables/secrets setup (Windows PowerShell)
 - `tests/test_backup.py`: Unit tests for the backup module
 - `tests/test_entrypoint_config.py`: Unit tests for gateway config generation behavior
 
@@ -40,7 +41,7 @@ In your Hugging Face Space (`Settings -> Variables and secrets`), configure at l
 - Secret: `OPENCLAW_GATEWAY_TOKEN`: Gateway token (recommended; if omitted in deployment workflow, generate a random 32-character value)
 - Secret: `OPENCLAW_GATEWAY_PASSWORD`: Gateway password (optional; if omitted in deployment workflow, generate a random 16-character value)
 
-When using `./scripts/bootstrap-hf.sh`, these values are configured automatically on the target Space.
+When using `./scripts/bootstrap-hf.sh` (macOS/Linux) or `./scripts/bootstrap-hf.ps1` (Windows PowerShell), these values are configured automatically on the target Space.
 
 ## Optional LLM Variables (All-Or-None)
 
@@ -82,9 +83,15 @@ Run the interactive bootstrap script from repo root:
 ./scripts/bootstrap-hf.sh
 ```
 
-`bootstrap-hf.sh` will:
+```powershell
+powershell -ExecutionPolicy ByPass -File .\scripts\bootstrap-hf.ps1
+```
 
-- Check/install `hf` CLI on macOS/Linux (`curl -LsSf https://hf.co/cli/install.sh | bash`)
+`bootstrap-hf.sh` / `bootstrap-hf.ps1` will:
+
+- Check/install `hf` CLI:
+  - macOS/Linux: `curl -LsSf https://hf.co/cli/install.sh | bash`
+  - Windows PowerShell: `powershell -ExecutionPolicy ByPass -c "irm https://hf.co/cli/install.ps1 | iex"`
 - Ensure HF login (`hf auth whoami` / `hf auth login`)
 - Ask for `space_name`, `dataset_name`, `OPENCLAW_VERSION`, gateway token/password, and optional LLM settings
 - Default `OPENCLAW_VERSION` to latest detected from npm registry (`openclaw`), fallback `latest` when detection fails
@@ -118,7 +125,12 @@ Please deploy OpenClaw to Hugging Face by strictly following the "Agent Deployme
 
 This runbook is for agents that need to deploy this repo to Hugging Face.
 
-Deployment must reuse `./scripts/bootstrap-hf.sh`. Do not hand-roll a separate deployment flow unless the user explicitly asks for a manual fallback.
+Deployment must reuse:
+
+- `./scripts/bootstrap-hf.sh` on macOS/Linux
+- `powershell -ExecutionPolicy ByPass -File .\scripts\bootstrap-hf.ps1` on Windows PowerShell
+
+Do not hand-roll a separate deployment flow unless the user explicitly asks for a manual fallback.
 
 ### 1. Preflight check before collecting inputs
 
@@ -146,14 +158,14 @@ hf version
 python3 --version
 ```
 
-`bootstrap-hf.sh` also depends on Python package `huggingface_hub`:
+Both bootstrap scripts also depend on Python package `huggingface_hub`:
 
 ```bash
 python3 -c "import huggingface_hub" >/dev/null 2>&1 || \
   python3 -m pip install --user 'huggingface_hub[cli]'
 ```
 
-### 2. Ask user for inputs in the same order as `bootstrap-hf.sh` (with explanations)
+### 2. Ask user for inputs in the same order as the bootstrap script prompts (with explanations)
 
 Agent should ask in one consolidated message, in this order:
 
@@ -176,6 +188,12 @@ From repo root:
 
 ```bash
 ./scripts/bootstrap-hf.sh
+```
+
+Or on Windows PowerShell:
+
+```powershell
+powershell -ExecutionPolicy ByPass -File .\scripts\bootstrap-hf.ps1
 ```
 
 Agent should follow the script prompts step by step using the user-provided values in the same order.
