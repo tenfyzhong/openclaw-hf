@@ -20,6 +20,36 @@ function Write-Info {
   Write-Host $Message
 }
 
+$script:BootstrapStepIndex = 0
+
+function Get-LogTimestamp {
+  return (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+}
+
+function Write-StepStart {
+  param([string]$Message)
+
+  $script:BootstrapStepIndex += 1
+  Write-Info ("[{0}] [bootstrap step {1}] START {2}" -f (Get-LogTimestamp), $script:BootstrapStepIndex, $Message)
+}
+
+function Write-StepDone {
+  param([string]$Message)
+
+  Write-Info ("[{0}] [bootstrap step {1}] DONE  {2}" -f (Get-LogTimestamp), $script:BootstrapStepIndex, $Message)
+}
+
+function Invoke-Step {
+  param(
+    [string]$Message,
+    [ScriptBlock]$Action
+  )
+
+  Write-StepStart -Message $Message
+  & $Action
+  Write-StepDone -Message $Message
+}
+
 function Fail {
   param([string]$Message)
 
@@ -315,6 +345,32 @@ except Exception as exc:
   }
 }
 
+function Set-SpaceVariableLogged {
+  param(
+    [string]$SpaceRepoId,
+    [string]$Key,
+    [string]$Value,
+    [string]$ApiToken
+  )
+
+  Invoke-Step -Message "Set Space variable $Key" -Action {
+    Set-SpaceVariable -SpaceRepoId $SpaceRepoId -Key $Key -Value $Value -ApiToken $ApiToken
+  }
+}
+
+function Set-SpaceSecretLogged {
+  param(
+    [string]$SpaceRepoId,
+    [string]$Key,
+    [string]$Value,
+    [string]$ApiToken
+  )
+
+  Invoke-Step -Message "Set Space secret $Key" -Action {
+    Set-SpaceSecret -SpaceRepoId $SpaceRepoId -Key $Key -Value $Value -ApiToken $ApiToken
+  }
+}
+
 function Restart-Space {
   param(
     [string]$SpaceRepoId,
@@ -344,151 +400,194 @@ except Exception as exc:
 }
 
 function Main {
-  Set-Location $repo_root
+  Invoke-Step -Message "Change directory to repository root" -Action {
+    Set-Location $repo_root
+  }
 
   Write-Info "OpenClaw Hugging Face bootstrap (interactive, Windows PowerShell)"
-  Ensure-Git
-  Ensure-HfCli
-  Ensure-Python3
-  Ensure-HuggingFaceHubPy
-
-  & git --version
-  & hf version
-  & python3 --version
-
-  if (-not (Test-HfLoggedIn)) {
-    Write-Info "HF CLI is not logged in. Starting 'hf auth login'..."
-    & hf auth login
-    if ($LASTEXITCODE -ne 0) {
-      Fail "hf auth login failed."
+  Invoke-Step -Message "Check dependency git" -Action { Ensure-Git }
+  Invoke-Step -Message "Check dependency hf CLI" -Action { Ensure-HfCli }
+  Invoke-Step -Message "Check dependency python3" -Action { Ensure-Python3 }
+  Invoke-Step -Message "Check dependency python package huggingface_hub" -Action { Ensure-HuggingFaceHubPy }
+  Invoke-Step -Message "Print dependency versions" -Action {
+    & git --version
+    & hf version
+    & python3 --version
+  }
+  Invoke-Step -Message "Ensure HF CLI login is active" -Action {
+    if (-not (Test-HfLoggedIn)) {
+      Write-Info "HF CLI is not logged in. Starting 'hf auth login'..."
+      & hf auth login
+      if ($LASTEXITCODE -ne 0) {
+        Fail "hf auth login failed."
+      }
+    } else {
+      Write-Info "HF CLI login already active."
     }
   }
 
-  $hf_username = Trim-Value (Get-HfUsername)
-  if ([string]::IsNullOrEmpty($hf_username)) {
-    $hf_username = Prompt-Required -Prompt "HF username (cannot parse from hf auth whoami)"
+  $hf_username = ""
+  Invoke-Step -Message "Resolve HF username" -Action {
+    $hf_username = Trim-Value (Get-HfUsername)
+    if ([string]::IsNullOrEmpty($hf_username)) {
+      $hf_username = Prompt-Required -Prompt "HF username (cannot parse from hf auth whoami)"
+    }
+    Write-Info "HF user: $hf_username"
   }
-  Write-Info "HF user: $hf_username"
 
-  $space_name = Prompt-Required -Prompt "Space name (without username)" -DefaultValue "openclaw-hf"
-  $dataset_name = Prompt-Required -Prompt "Dataset name (without username)" -DefaultValue "$space_name-backup"
-
-  $default_openclaw_version = Trim-Value $env:OPENCLAW_VERSION
-  if ([string]::IsNullOrEmpty($default_openclaw_version)) {
-    $default_openclaw_version = Resolve-LatestOpenclawVersion
+  $space_name = ""
+  $dataset_name = ""
+  Invoke-Step -Message "Collect Space and Dataset names" -Action {
+    $space_name = Prompt-Required -Prompt "Space name (without username)" -DefaultValue "openclaw-hf"
+    $dataset_name = Prompt-Required -Prompt "Dataset name (without username)" -DefaultValue "$space_name-backup"
   }
-  $openclaw_version = Prompt-Required -Prompt "OPENCLAW_VERSION (press Enter to use detected latest)" -DefaultValue $default_openclaw_version
+
+  $openclaw_version = ""
+  Invoke-Step -Message "Resolve and confirm OPENCLAW_VERSION" -Action {
+    $default_openclaw_version = Trim-Value $env:OPENCLAW_VERSION
+    if ([string]::IsNullOrEmpty($default_openclaw_version)) {
+      $default_openclaw_version = Resolve-LatestOpenclawVersion
+    }
+    $openclaw_version = Prompt-Required -Prompt "OPENCLAW_VERSION (press Enter to use detected latest)" -DefaultValue $default_openclaw_version
+  }
 
   $space_repo_id = "$hf_username/$space_name"
   $dataset_repo_id = "$hf_username/$dataset_name"
 
-  $gateway_token = Prompt-SecretOptional -Prompt "OPENCLAW_GATEWAY_TOKEN (optional, leave empty to auto-generate 32 chars)"
+  $gateway_token = ""
   $generated_gateway_token = $false
-  if ([string]::IsNullOrEmpty($gateway_token)) {
-    $gateway_token = New-RandomHex -Length 32
-    $generated_gateway_token = $true
+  Invoke-Step -Message "Collect OPENCLAW_GATEWAY_TOKEN" -Action {
+    $gateway_token = Prompt-SecretOptional -Prompt "OPENCLAW_GATEWAY_TOKEN (optional, leave empty to auto-generate 32 chars)"
+    if ([string]::IsNullOrEmpty($gateway_token)) {
+      $gateway_token = New-RandomHex -Length 32
+      $generated_gateway_token = $true
+      Write-Info "OPENCLAW_GATEWAY_TOKEN generated automatically."
+    }
   }
 
-  $gateway_password = Prompt-SecretOptional -Prompt "OPENCLAW_GATEWAY_PASSWORD (optional, leave empty to auto-generate 16 chars)"
+  $gateway_password = ""
   $generated_gateway_password = $false
-  if ([string]::IsNullOrEmpty($gateway_password)) {
-    $gateway_password = New-RandomHex -Length 16
-    $generated_gateway_password = $true
+  Invoke-Step -Message "Collect OPENCLAW_GATEWAY_PASSWORD" -Action {
+    $gateway_password = Prompt-SecretOptional -Prompt "OPENCLAW_GATEWAY_PASSWORD (optional, leave empty to auto-generate 16 chars)"
+    if ([string]::IsNullOrEmpty($gateway_password)) {
+      $gateway_password = New-RandomHex -Length 16
+      $generated_gateway_password = $true
+      Write-Info "OPENCLAW_GATEWAY_PASSWORD generated automatically."
+    }
   }
 
-  $current_hf_token = Read-CurrentHfToken
-  $hf_token_for_backup = Prompt-SecretOptional -Prompt "HF_TOKEN for backup dataset (optional, leave empty to reuse current login token)"
-  if ([string]::IsNullOrEmpty($hf_token_for_backup)) {
-    $hf_token_for_backup = $current_hf_token
-  }
-  if ([string]::IsNullOrEmpty($hf_token_for_backup)) {
-    Fail "HF_TOKEN is required to configure Space secret HF_TOKEN."
+  $hf_token_for_backup = ""
+  Invoke-Step -Message "Collect HF_TOKEN for backup dataset" -Action {
+    $current_hf_token = Read-CurrentHfToken
+    $hf_token_for_backup = Prompt-SecretOptional -Prompt "HF_TOKEN for backup dataset (optional, leave empty to reuse current login token)"
+    if ([string]::IsNullOrEmpty($hf_token_for_backup)) {
+      $hf_token_for_backup = $current_hf_token
+    }
+    if ([string]::IsNullOrEmpty($hf_token_for_backup)) {
+      Fail "HF_TOKEN is required to configure Space secret HF_TOKEN."
+    }
   }
 
-  $configure_llm = Prompt-YesNo -Prompt "Configure custom LLM now?" -DefaultValue "n"
+  $configure_llm = "no"
   $llm_base_url = ""
   $llm_model = ""
   $llm_api_key = ""
   $enable_sshx = "no"
-
-  if ($configure_llm -eq "yes") {
-    $llm_base_url = Prompt-Required -Prompt "OPENCLAW_LLM_BASE_URL"
-    $llm_model = Prompt-Required -Prompt "OPENCLAW_LLM_MODEL"
-    $llm_api_key = Prompt-SecretOptional -Prompt "OPENCLAW_LLM_API_KEY"
-    if ([string]::IsNullOrEmpty($llm_api_key)) {
-      Fail "OPENCLAW_LLM_API_KEY is required when enabling custom LLM config."
+  Invoke-Step -Message "Collect custom LLM or sshx bootstrap options" -Action {
+    $configure_llm = Prompt-YesNo -Prompt "Configure custom LLM now?" -DefaultValue "n"
+    if ($configure_llm -eq "yes") {
+      $llm_base_url = Prompt-Required -Prompt "OPENCLAW_LLM_BASE_URL"
+      $llm_model = Prompt-Required -Prompt "OPENCLAW_LLM_MODEL"
+      $llm_api_key = Prompt-SecretOptional -Prompt "OPENCLAW_LLM_API_KEY"
+      if ([string]::IsNullOrEmpty($llm_api_key)) {
+        Fail "OPENCLAW_LLM_API_KEY is required when enabling custom LLM config."
+      }
+    } else {
+      $enable_sshx = Prompt-YesNo -Prompt "Set OPENCLAW_SSHX_AUTO_START=true for later sshx setup?" -DefaultValue "y"
     }
-  } else {
-    $enable_sshx = Prompt-YesNo -Prompt "Set OPENCLAW_SSHX_AUTO_START=true for later sshx setup?" -DefaultValue "y"
   }
 
-  $restart_now = Prompt-YesNo -Prompt "Restart Space at the end?" -DefaultValue "y"
-
-  Write-Info "Creating private Space and Dataset..."
-  & hf repo create $space_repo_id --repo-type space --space-sdk docker --private --exist-ok
-  if ($LASTEXITCODE -ne 0) {
-    Fail "failed to create Space repo"
-  }
-  & hf repo create $dataset_repo_id --repo-type dataset --private --exist-ok
-  if ($LASTEXITCODE -ne 0) {
-    Fail "failed to create Dataset repo"
+  $restart_now = "no"
+  Invoke-Step -Message "Collect restart preference" -Action {
+    $restart_now = Prompt-YesNo -Prompt "Restart Space at the end?" -DefaultValue "y"
   }
 
-  Write-Info "Uploading repository to Space..."
-  & hf upload $space_repo_id . --repo-type space --exclude ".git/**" --exclude ".git" --commit-message "feat: deploy openclaw to hf space"
-  if ($LASTEXITCODE -ne 0) {
-    Fail "failed to upload repository to Space"
+  Invoke-Step -Message "Create Space repo $space_repo_id" -Action {
+    & hf repo create $space_repo_id --repo-type space --space-sdk docker --private --exist-ok
+    if ($LASTEXITCODE -ne 0) {
+      Fail "failed to create Space repo"
+    }
+  }
+  Invoke-Step -Message "Create Dataset repo $dataset_repo_id" -Action {
+    & hf repo create $dataset_repo_id --repo-type dataset --private --exist-ok
+    if ($LASTEXITCODE -ne 0) {
+      Fail "failed to create Dataset repo"
+    }
+  }
+  Invoke-Step -Message "Upload repository to Space $space_repo_id" -Action {
+    & hf upload $space_repo_id . --repo-type space --exclude ".git/**" --exclude ".git" --commit-message "feat: deploy openclaw to hf space"
+    if ($LASTEXITCODE -ne 0) {
+      Fail "failed to upload repository to Space"
+    }
   }
 
-  $api_token = Read-CurrentHfToken
-  if ([string]::IsNullOrEmpty($api_token)) {
-    $api_token = $hf_token_for_backup
+  $api_token = ""
+  Invoke-Step -Message "Resolve API token for Space configuration" -Action {
+    $api_token = Read-CurrentHfToken
+    if ([string]::IsNullOrEmpty($api_token)) {
+      $api_token = $hf_token_for_backup
+    }
+    if ([string]::IsNullOrEmpty($api_token)) {
+      Fail "unable to resolve API token for Space configuration."
+    }
   }
 
-  Write-Info "Configuring Space variables and secrets..."
-  Set-SpaceVariable -SpaceRepoId $space_repo_id -Key "OPENCLAW_BACKUP_DATASET_REPO" -Value $dataset_repo_id -ApiToken $api_token
-  Set-SpaceVariable -SpaceRepoId $space_repo_id -Key "OPENCLAW_VERSION" -Value $openclaw_version -ApiToken $api_token
-  Set-SpaceVariable -SpaceRepoId $space_repo_id -Key "OPENCLAW_GATEWAY_CONTROLUI_ALLOW_INSECURE_AUTH" -Value "true" -ApiToken $api_token
-  Set-SpaceVariable -SpaceRepoId $space_repo_id -Key "OPENCLAW_GATEWAY_CONTROLUI_DANGEROUSLY_DISABLE_DEVICE_AUTH" -Value "true" -ApiToken $api_token
-  Set-SpaceSecret -SpaceRepoId $space_repo_id -Key "OPENCLAW_GATEWAY_TOKEN" -Value $gateway_token -ApiToken $api_token
-  Set-SpaceSecret -SpaceRepoId $space_repo_id -Key "OPENCLAW_GATEWAY_PASSWORD" -Value $gateway_password -ApiToken $api_token
-  Set-SpaceSecret -SpaceRepoId $space_repo_id -Key "HF_TOKEN" -Value $hf_token_for_backup -ApiToken $api_token
+  Set-SpaceVariableLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_BACKUP_DATASET_REPO" -Value $dataset_repo_id -ApiToken $api_token
+  Set-SpaceVariableLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_VERSION" -Value $openclaw_version -ApiToken $api_token
+  Set-SpaceVariableLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_GATEWAY_CONTROLUI_ALLOW_INSECURE_AUTH" -Value "true" -ApiToken $api_token
+  Set-SpaceVariableLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_GATEWAY_CONTROLUI_DANGEROUSLY_DISABLE_DEVICE_AUTH" -Value "true" -ApiToken $api_token
+  Set-SpaceSecretLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_GATEWAY_TOKEN" -Value $gateway_token -ApiToken $api_token
+  Set-SpaceSecretLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_GATEWAY_PASSWORD" -Value $gateway_password -ApiToken $api_token
+  Set-SpaceSecretLogged -SpaceRepoId $space_repo_id -Key "HF_TOKEN" -Value $hf_token_for_backup -ApiToken $api_token
 
   if ($configure_llm -eq "yes") {
-    Set-SpaceVariable -SpaceRepoId $space_repo_id -Key "OPENCLAW_LLM_BASE_URL" -Value $llm_base_url -ApiToken $api_token
-    Set-SpaceVariable -SpaceRepoId $space_repo_id -Key "OPENCLAW_LLM_MODEL" -Value $llm_model -ApiToken $api_token
-    Set-SpaceSecret -SpaceRepoId $space_repo_id -Key "OPENCLAW_LLM_API_KEY" -Value $llm_api_key -ApiToken $api_token
+    Set-SpaceVariableLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_LLM_BASE_URL" -Value $llm_base_url -ApiToken $api_token
+    Set-SpaceVariableLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_LLM_MODEL" -Value $llm_model -ApiToken $api_token
+    Set-SpaceSecretLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_LLM_API_KEY" -Value $llm_api_key -ApiToken $api_token
   } elseif ($enable_sshx -eq "yes") {
-    Set-SpaceVariable -SpaceRepoId $space_repo_id -Key "OPENCLAW_SSHX_AUTO_START" -Value "true" -ApiToken $api_token
+    Set-SpaceVariableLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_SSHX_AUTO_START" -Value "true" -ApiToken $api_token
   }
 
   if ($restart_now -eq "yes") {
-    Write-Info "Restarting Space..."
-    try {
-      Restart-Space -SpaceRepoId $space_repo_id -ApiToken $api_token
-    }
-    catch {
-      Write-Error "Space restart failed. You can restart manually from Hugging Face Space Settings."
+    Invoke-Step -Message "Restart Space $space_repo_id" -Action {
+      try {
+        Restart-Space -SpaceRepoId $space_repo_id -ApiToken $api_token
+      }
+      catch {
+        Write-Error "Space restart failed. You can restart manually from Hugging Face Space Settings."
+      }
     }
   }
 
-  $space_host = "$($space_repo_id -replace '/', '-').hf.space"
-  $app_url = "https://$space_host"
-  $health_url = "$app_url/healthz"
+  Invoke-Step -Message "Print deployment summary" -Action {
+    $space_host = "$($space_repo_id -replace '/', '-').hf.space"
+    $app_url = "https://$space_host"
+    $health_url = "$app_url/healthz"
 
-  Write-Info ""
-  Write-Info "Deployment complete."
-  Write-Info "Space repo: $space_repo_id"
-  Write-Info "Dataset repo: $dataset_repo_id"
-  Write-Info "OPENCLAW_VERSION: $openclaw_version"
-  Write-Info "Space URL: $app_url"
-  Write-Info "Health URL: $health_url"
+    Write-Info ""
+    Write-Info "Deployment complete."
+    Write-Info "Space repo: $space_repo_id"
+    Write-Info "Dataset repo: $dataset_repo_id"
+    Write-Info "OPENCLAW_VERSION: $openclaw_version"
+    Write-Info "Space URL: $app_url"
+    Write-Info "Health URL: $health_url"
 
-  if ($generated_gateway_token) {
-    Write-Info "Generated OPENCLAW_GATEWAY_TOKEN=$gateway_token"
-  }
-  if ($generated_gateway_password) {
-    Write-Info "Generated OPENCLAW_GATEWAY_PASSWORD=$gateway_password"
+    if ($generated_gateway_token) {
+      Write-Info "Generated OPENCLAW_GATEWAY_TOKEN=$gateway_token"
+    }
+    if ($generated_gateway_password) {
+      Write-Info "Generated OPENCLAW_GATEWAY_PASSWORD=$gateway_password"
+    }
   }
 }
 

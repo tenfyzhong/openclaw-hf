@@ -34,6 +34,29 @@ export OPENCLAW_HOME
 export OPENCLAW_STATE_DIR
 export OPENCLAW_CONFIG_PATH
 export OPENCLAW_BACKUP_ENV_FILE_PATH
+OPENCLAW_STEP_INDEX=0
+OPENCLAW_ENTRYPOINT_TAG="openclaw-entrypoint"
+
+timestamp_utc() {
+  date -u +"%Y-%m-%dT%H:%M:%SZ"
+}
+
+log_info() {
+  printf '[%s] %s: %s\n' "$(timestamp_utc)" "$OPENCLAW_ENTRYPOINT_TAG" "$*"
+}
+
+log_warn() {
+  printf '[%s] %s: %s\n' "$(timestamp_utc)" "$OPENCLAW_ENTRYPOINT_TAG" "$*" >&2
+}
+
+run_step() {
+  local description="$1"
+  shift
+  OPENCLAW_STEP_INDEX=$((OPENCLAW_STEP_INDEX + 1))
+  log_info "step ${OPENCLAW_STEP_INDEX} start: ${description}"
+  "$@"
+  log_info "step ${OPENCLAW_STEP_INDEX} done: ${description}"
+}
 
 is_true() {
   local value
@@ -474,6 +497,7 @@ run_gateway_with_shutdown_backup() {
       return 0
     fi
     shutting_down=1
+    log_warn "received ${signal}, preparing graceful shutdown"
 
     if [[ -n "$OPENCLAW_CHILD_PID" ]] && kill -0 "$OPENCLAW_CHILD_PID" >/dev/null 2>&1; then
       kill -s "$signal" "$OPENCLAW_CHILD_PID" >/dev/null 2>&1 || kill "$OPENCLAW_CHILD_PID" >/dev/null 2>&1 || true
@@ -482,6 +506,7 @@ run_gateway_with_shutdown_backup() {
       fi
     fi
 
+    log_info "gateway process stopped with code ${gateway_exit_code}"
     stop_sshx_background
     backup_on_shutdown
     trap - TERM INT QUIT
@@ -492,10 +517,13 @@ run_gateway_with_shutdown_backup() {
   trap 'on_gateway_signal INT' INT
   trap 'on_gateway_signal QUIT' QUIT
 
+  log_info "starting gateway process (bind=${OPENCLAW_GATEWAY_BIND}, port=${OPENCLAW_GATEWAY_PORT})"
   run_as_node_background openclaw gateway --allow-unconfigured --bind "$OPENCLAW_GATEWAY_BIND" --port "$OPENCLAW_GATEWAY_PORT" "$@"
+  log_info "gateway process started (pid=${OPENCLAW_CHILD_PID})"
   if ! wait "$OPENCLAW_CHILD_PID"; then
     gateway_exit_code=$?
   fi
+  log_info "gateway process exited (pid=${OPENCLAW_CHILD_PID}, code=${gateway_exit_code})"
 
   stop_sshx_background
   backup_on_shutdown
@@ -512,14 +540,24 @@ main() {
   shift || true
 
   if [[ "$subcommand" == "gateway" ]]; then
-    mkdir_state_dirs
-    restore_from_backup_on_startup
-    write_or_update_config
-    fix_permissions
-    setup_backup_cron
-    start_sshx_background
+    log_info "starting gateway bootstrap sequence"
+    run_step "prepare runtime directories" mkdir_state_dirs
+    run_step "restore state from backup (if configured)" restore_from_backup_on_startup
+    run_step "write or update gateway config" write_or_update_config
+    run_step "fix file ownership and permissions" fix_permissions
+    run_step "setup backup cron (if enabled)" setup_backup_cron
+    run_step "start sshx background service (if enabled)" start_sshx_background
+    OPENCLAW_STEP_INDEX=$((OPENCLAW_STEP_INDEX + 1))
+    log_info "step ${OPENCLAW_STEP_INDEX} start: launch gateway"
     run_gateway_with_shutdown_backup "$@"
+    local gateway_exit_code=$?
+    if [[ "$gateway_exit_code" -ne 0 ]]; then
+      log_warn "gateway exited with non-zero code ${gateway_exit_code}"
+      return "$gateway_exit_code"
+    fi
+    log_info "step ${OPENCLAW_STEP_INDEX} done: launch gateway"
   else
+    log_info "starting subcommand: openclaw ${subcommand}"
     run_as_node openclaw "$subcommand" "$@"
   fi
 }
