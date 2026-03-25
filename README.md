@@ -68,6 +68,7 @@ In that case, you can still configure from inside the container (for example via
 - `OPENCLAW_BACKUP_SOURCE_DIR` (default: `/root`, backup/restore base directory)
 - `OPENCLAW_BACKUP_PATH_PREFIX` (default: `backups`)
 - `OPENCLAW_BACKUP_LATEST_NAME` (default: `latest-backup.tar.gz`)
+- `OPENCLAW_BACKUP_KEEP_COUNT` (default: `48`, keep newest N timestamped backup archives; older ones are auto-deleted)
 - `OPENCLAW_SSHX_AUTO_START` (default: `false`; set `true` to auto-run `sshx` in background on startup)
 - `OPENCLAW_GATEWAY_AUTH_MODE` (default: `token`, optional: `password`)
 - `OPENCLAW_GATEWAY_CONTROLUI_ALLOW_INSECURE_AUTH` (default: `false`)
@@ -472,6 +473,7 @@ For this project, if you need stable dashboard access without cold starts, use p
   - `backups/openclaw-backup-<timestamp>.tar.gz`
   - `latest-backup.tar.gz`
   - `latest-backup.json`
+- Retention: after upload, only the newest `OPENCLAW_BACKUP_KEEP_COUNT` timestamped archives are kept (default `48`); older timestamped archives are deleted automatically
 
 ## Use sshx Inside the Container
 

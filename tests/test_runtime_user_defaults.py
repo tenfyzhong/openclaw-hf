@@ -67,6 +67,10 @@ class RuntimeUserDefaultsTests(unittest.TestCase):
             entrypoint,
         )
 
+    def test_backup_env_file_includes_keep_count(self):
+        entrypoint = self._entrypoint_path().read_text(encoding="utf-8")
+        self.assertIn("OPENCLAW_BACKUP_KEEP_COUNT", entrypoint)
+
     def test_sshx_auto_start_does_not_use_command_substitution(self):
         entrypoint = self._entrypoint_path().read_text(encoding="utf-8")
         self.assertNotIn('OPENCLAW_SSHX_PID="$(run_as_node_background_stdout sshx)"', entrypoint)

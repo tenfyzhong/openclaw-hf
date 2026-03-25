@@ -7,6 +7,7 @@ import argparse
 import datetime as dt
 import json
 import os
+import re
 import shutil
 import sys
 import tarfile
@@ -47,6 +48,7 @@ class BackupConfig:
     path_prefix: str
     latest_name: str
     private: bool
+    keep_count: int = 48
 
     @classmethod
     def from_env(cls) -> "BackupConfig":
@@ -61,6 +63,23 @@ class BackupConfig:
         path_prefix = (os.getenv("OPENCLAW_BACKUP_PATH_PREFIX") or "backups").strip("/")
         latest_name = (os.getenv("OPENCLAW_BACKUP_LATEST_NAME") or "latest-backup.tar.gz").strip()
         private = env_bool("OPENCLAW_BACKUP_PRIVATE", True)
+        keep_count = 48
+        keep_count_raw = (os.getenv("OPENCLAW_BACKUP_KEEP_COUNT") or "").strip()
+        if keep_count_raw:
+            try:
+                parsed_keep_count = int(keep_count_raw)
+                if parsed_keep_count >= 1:
+                    keep_count = parsed_keep_count
+                else:
+                    print(
+                        f"invalid OPENCLAW_BACKUP_KEEP_COUNT={keep_count_raw!r}, fallback to 48",
+                        file=sys.stderr,
+                    )
+            except ValueError:
+                print(
+                    f"invalid OPENCLAW_BACKUP_KEEP_COUNT={keep_count_raw!r}, fallback to 48",
+                    file=sys.stderr,
+                )
 
         return cls(
             dataset_repo=dataset_repo,
@@ -71,10 +90,13 @@ class BackupConfig:
             path_prefix=path_prefix,
             latest_name=latest_name,
             private=private,
+            keep_count=keep_count,
         )
 
 
 class OpenClawBackup:
+    _ARCHIVE_NAME_RE = re.compile(r"^openclaw-backup-(\d{8}-\d{6})\.tar\.gz$")
+
     def __init__(self, config: BackupConfig, api: Optional[Any] = None, token: Optional[str] = None) -> None:
         self.config = config
         self.token = token or os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_HUB_TOKEN")
@@ -145,7 +167,60 @@ class OpenClawBackup:
             commit_message="backup: update latest-backup metadata",
         )
 
+        self.prune_old_backups()
         return remote_archive_path
+
+    def _list_backup_archive_paths(self) -> list[str]:
+        if not hasattr(self.api, "list_repo_files"):
+            return []
+
+        files = self.api.list_repo_files(
+            repo_id=self.config.dataset_repo,
+            repo_type=self.config.repo_type,
+        )
+        path_prefix = self.config.path_prefix.strip("/")
+        path_prefix_slash = f"{path_prefix}/" if path_prefix else ""
+        matched: list[tuple[str, str]] = []
+
+        for path in files:
+            if not isinstance(path, str):
+                continue
+
+            relative_path = path
+            if path_prefix_slash:
+                if not path.startswith(path_prefix_slash):
+                    continue
+                relative_path = path[len(path_prefix_slash) :]
+
+            if "/" in relative_path:
+                continue
+
+            match = self._ARCHIVE_NAME_RE.fullmatch(relative_path)
+            if match is None:
+                continue
+
+            matched.append((match.group(1), path))
+
+        matched.sort(key=lambda item: item[0], reverse=True)
+        return [path for _, path in matched]
+
+    def prune_old_backups(self) -> list[str]:
+        if not hasattr(self.api, "delete_file"):
+            return []
+
+        keep_count = self.config.keep_count if self.config.keep_count >= 1 else 48
+        archive_paths = self._list_backup_archive_paths()
+        to_delete = archive_paths[keep_count:]
+
+        for path in to_delete:
+            self.api.delete_file(
+                repo_id=self.config.dataset_repo,
+                repo_type=self.config.repo_type,
+                path_in_repo=path,
+                commit_message=f"backup: prune {Path(path).name}",
+            )
+
+        return to_delete
 
     def backup(self) -> Path:
         self.ensure_dataset_repo()
