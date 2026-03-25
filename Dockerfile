@@ -6,21 +6,36 @@ ARG DEBIAN_FRONTEND=noninteractive
 ARG OPENCLAW_VERSION
 ENV OPENCLAW_VERSION=$OPENCLAW_VERSION
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-      ca-certificates \
-      cron \
-      curl \
-      git \
-      gnupg \
-      gosu \
-      hostname \
-      jq \
-      openssl \
-      procps \
-      python3 \
-      python3-pip \
-      tar && \
+RUN printf 'Acquire::Retries "5";\nAcquire::http::Timeout "30";\nAcquire::https::Timeout "30";\n' \
+      > /etc/apt/apt.conf.d/80-openclaw-retries && \
+    set -eux; \
+    for attempt in 1 2 3 4 5; do \
+      if apt-get update && apt-get install -y --no-install-recommends \
+          ca-certificates \
+          cmake \
+          cron \
+          curl \
+          g++ \
+          git \
+          gnupg \
+          gosu \
+          hostname \
+          jq \
+          make \
+          openssl \
+          procps \
+          python3 \
+          python3-pip \
+          tar; then \
+        break; \
+      fi; \
+      if [ "$attempt" -eq 5 ]; then \
+        exit 1; \
+      fi; \
+      echo "apt bootstrap failed on attempt $attempt, retrying..." >&2; \
+      rm -rf /var/lib/apt/lists/*; \
+      sleep $((attempt * 5)); \
+    done; \
     rm -rf /var/lib/apt/lists/*
 
 RUN /bin/bash -lc 'set -euo pipefail; \
@@ -86,7 +101,7 @@ ENV OPENCLAW_BACKUP_LATEST_NAME=latest-backup.tar.gz
 EXPOSE 7860
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=25s --retries=5 \
-  CMD node -e "const p=process.env.OPENCLAW_GATEWAY_PORT||'7860';fetch('http://127.0.0.1:'+p+'/healthz').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD /bin/bash -lc 'set -euo pipefail; URL="http://127.0.0.1:${OPENCLAW_GATEWAY_PORT:-7860}/healthz"; if [[ -n "${OPENCLAW_GATEWAY_TOKEN:-}" ]]; then curl -fsS --max-time 3 -H "x-openclaw-token: ${OPENCLAW_GATEWAY_TOKEN}" "$URL" >/dev/null; else curl -fsS --max-time 3 "$URL" >/dev/null; fi'
 
 ENTRYPOINT ["/usr/local/bin/openclaw-entrypoint.sh"]
 CMD ["gateway"]
