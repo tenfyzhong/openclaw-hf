@@ -113,24 +113,21 @@ command -v git >/dev/null 2>&1 || MISSING_GIT=1
 command -v hf >/dev/null 2>&1 || MISSING_HF=1
 ```
 
-If any tool is missing, agent should install automatically (based on OS/package manager):
+If any tool is missing, agent should install automatically:
 
 ```bash
-# macOS (Homebrew)
-if command -v brew >/dev/null 2>&1; then
-  [ "${MISSING_GIT:-0}" = "1" ] && brew install git
-  [ "${MISSING_HF:-0}" = "1" ] && brew install huggingface-cli
-fi
+# install git (agent can choose package manager based on OS)
 
-# Ubuntu/Debian
-if command -v apt-get >/dev/null 2>&1; then
-  [ "${MISSING_GIT:-0}" = "1" ] && sudo apt-get update && sudo apt-get install -y git
-  if [ "${MISSING_HF:-0}" = "1" ]; then
-    sudo apt-get update
-    sudo apt-get install -y python3-pip
-    python3 -m pip install --user --break-system-packages "huggingface_hub[cli]"
-  fi
+# install HF CLI on macOS/Linux when missing
+if [ "${MISSING_HF:-0}" = "1" ]; then
+  curl -LsSf https://hf.co/cli/install.sh | bash
 fi
+```
+
+Windows HF CLI install command (PowerShell):
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://hf.co/cli/install.ps1 | iex"
 ```
 
 Then verify:
@@ -154,10 +151,13 @@ fi
 
 Required user inputs:
 
-- `OPENCLAW_GATEWAY_TOKEN`
-- `OPENCLAW_GATEWAY_PASSWORD`
 - `space_name`
 - `dataset_name`
+
+Optional user inputs:
+
+- `OPENCLAW_GATEWAY_TOKEN` (if missing, auto-generate a random 32-character string)
+- `OPENCLAW_GATEWAY_PASSWORD` (if missing, auto-generate a random 16-character string)
 
 Conditional required user input:
 
@@ -201,8 +201,8 @@ Agent must explain what each variable is used for in the selected language when 
 - `OPENCLAW_LLM_BASE_URL` (optional): LLM API base URL endpoint.
 - `OPENCLAW_LLM_MODEL` (optional): LLM model ID used by OpenClaw.
 - `OPENCLAW_LLM_API_KEY` (optional): LLM provider API key (secret).
-- `OPENCLAW_GATEWAY_TOKEN`: gateway token for token auth mode (secret).
-- `OPENCLAW_GATEWAY_PASSWORD`: gateway password for password auth mode (secret).
+- `OPENCLAW_GATEWAY_TOKEN` (optional): gateway token for token auth mode (secret). If omitted, auto-generate 32 random characters.
+- `OPENCLAW_GATEWAY_PASSWORD` (optional): gateway password for password auth mode (secret). If omitted, auto-generate 16 random characters.
 - `space_name`: Hugging Face Space name; final repo ID becomes `<hf_username>/<space_name>`.
 - `dataset_name`: Hugging Face Dataset name for backup; final repo ID becomes `<hf_username>/<dataset_name>`.
 
@@ -220,10 +220,12 @@ If HF is not logged in:
 - I will use a new HF_TOKEN for this deployment by default.
 
 Please provide these required values:
-- OPENCLAW_GATEWAY_TOKEN: gateway token for token auth mode (secret)
-- OPENCLAW_GATEWAY_PASSWORD: gateway password for password auth mode (secret)
 - space_name: Space name (final repo: <hf_username>/<space_name>)
 - dataset_name: Dataset name (final repo: <hf_username>/<dataset_name>)
+
+Optional (if omitted, I will auto-generate and return to you after deployment):
+- OPENCLAW_GATEWAY_TOKEN: gateway token for token auth mode (32 random characters)
+- OPENCLAW_GATEWAY_PASSWORD: gateway password for password auth mode (16 random characters)
 
 If HF is not logged in, or if you choose new-token mode, also provide:
 - HF_TOKEN: token with write access to the target Space and Dataset
@@ -239,6 +241,23 @@ If you skip optional LLM preconfiguration, do you want me to set OPENCLAW_SSHX_A
 On follow-up turns, agent must ask only for missing required keys (do not repeatedly ask for values already provided).
 
 ### 3. Backup HF token, authenticate according to login status/mode, derive IDs, and clone repo
+
+Before configuring secrets, normalize gateway credentials:
+
+```bash
+GENERATED_OPENCLAW_GATEWAY_TOKEN=0
+GENERATED_OPENCLAW_GATEWAY_PASSWORD=0
+
+if [ -z "${OPENCLAW_GATEWAY_TOKEN:-}" ]; then
+  OPENCLAW_GATEWAY_TOKEN="$(openssl rand -hex 16)"
+  GENERATED_OPENCLAW_GATEWAY_TOKEN=1
+fi
+
+if [ -z "${OPENCLAW_GATEWAY_PASSWORD:-}" ]; then
+  OPENCLAW_GATEWAY_PASSWORD="$(openssl rand -hex 8)"
+  GENERATED_OPENCLAW_GATEWAY_PASSWORD=1
+fi
+```
 
 Before switching auth context, backup current local HF token state:
 
@@ -359,6 +378,8 @@ Agent final message must include:
 - Space repo ID: `<owner>/<space_name>`
 - App URL: `https://<owner>-<space_name>.hf.space`
 - Health URL: `https://<owner>-<space_name>.hf.space/healthz`
+- If `GENERATED_OPENCLAW_GATEWAY_TOKEN=1`, include generated `OPENCLAW_GATEWAY_TOKEN` in final response.
+- If `GENERATED_OPENCLAW_GATEWAY_PASSWORD=1`, include generated `OPENCLAW_GATEWAY_PASSWORD` in final response.
 - Keep-alive reminder:
   - For strict 24/7 uptime, use paid hardware and set `Sleep time` to `Never`.
   - On free tier, remind user the Space may sleep after inactivity and suggest periodic health checks as a workaround.
