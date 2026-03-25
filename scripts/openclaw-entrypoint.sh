@@ -310,6 +310,7 @@ write_backup_env_file() {
     OPENCLAW_BACKUP_REPO_TYPE
     OPENCLAW_BACKUP_PATH_PREFIX
     OPENCLAW_BACKUP_LATEST_NAME
+    OPENCLAW_BACKUP_KEEP_COUNT
     OPENCLAW_BACKUP_PRIVATE
     OPENCLAW_BACKUP_WORK_DIR
     OPENCLAW_BACKUP_SOURCE_DIR
@@ -424,9 +425,9 @@ start_sshx_background() {
   fi
 
   if [[ "$(id -u)" -eq 0 ]]; then
-    gosu "$OPENCLAW_USER:$OPENCLAW_GROUP" sshx >>"$OPENCLAW_STDOUT_LOG_PATH" 2>>"$OPENCLAW_STDERR_LOG_PATH" &
+    gosu "$OPENCLAW_USER:$OPENCLAW_GROUP" sshx >/proc/1/fd/1 2>/proc/1/fd/2 &
   else
-    sshx >>"$OPENCLAW_STDOUT_LOG_PATH" 2>>"$OPENCLAW_STDERR_LOG_PATH" &
+    sshx >/proc/1/fd/1 2>/proc/1/fd/2 &
   fi
   OPENCLAW_SSHX_PID="$!"
   echo "openclaw: sshx started in background (pid=$OPENCLAW_SSHX_PID)"

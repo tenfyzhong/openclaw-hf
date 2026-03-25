@@ -3,7 +3,8 @@
 FROM ubuntu:24.04
 
 ARG DEBIAN_FRONTEND=noninteractive
-ARG OPENCLAW_VERSION=latest
+ARG OPENCLAW_VERSION
+ENV OPENCLAW_VERSION=$OPENCLAW_VERSION
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -22,14 +23,15 @@ RUN apt-get update && \
       tar && \
     rm -rf /var/lib/apt/lists/*
 
-RUN HOME=/root /bin/bash -lc \
-    "curl -fsSL https://openclaw.ai/install.sh | bash -s -- --no-onboard --version \"${OPENCLAW_VERSION}\""
+RUN /bin/bash -lc 'set -euo pipefail; \
+    OPENCLAW_VERSION_VALUE="${OPENCLAW_VERSION:-latest}"; \
+    HOME=/root curl -fsSL https://openclaw.ai/install.sh | bash -s -- --no-onboard --version "$OPENCLAW_VERSION_VALUE"'
 
 RUN /bin/bash -lc 'set -euo pipefail; \
-    OPENCLAW_BIN=""; \
-    if [[ -x /root/.npm-global/bin/openclaw ]]; then \
+    OPENCLAW_BIN="$(command -v openclaw || true)"; \
+    if [[ -z "$OPENCLAW_BIN" ]] && [[ -x /root/.npm-global/bin/openclaw ]]; then \
       OPENCLAW_BIN=/root/.npm-global/bin/openclaw; \
-    elif [[ -x /root/.local/bin/openclaw ]]; then \
+    elif [[ -z "$OPENCLAW_BIN" ]] && [[ -x /root/.local/bin/openclaw ]]; then \
       OPENCLAW_BIN=/root/.local/bin/openclaw; \
     fi; \
     if [[ -z "$OPENCLAW_BIN" ]]; then \

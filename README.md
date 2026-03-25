@@ -27,7 +27,7 @@ This setup is designed to provide the following:
 - `openclaw_hf/backup.py`: Backup/restore implementation
 - `scripts/openclaw-backup-cron.sh`: Cron entrypoint for backup jobs
 - `scripts/openclaw-restore.sh`: Startup restore entrypoint
-- `scripts/bootstrap-hf.sh`: Helper script to create a Space + Dataset
+- `scripts/bootstrap-hf.sh`: Interactive bootstrap for Space/Dataset creation, upload, and Space variables/secrets setup
 - `tests/test_backup.py`: Unit tests for the backup module
 - `tests/test_entrypoint_config.py`: Unit tests for gateway config generation behavior
 
@@ -37,8 +37,10 @@ In your Hugging Face Space (`Settings -> Variables and secrets`), configure at l
 
 - Variable: `OPENCLAW_BACKUP_DATASET_REPO`: Backup target Dataset in `username/dataset-name` format
 - Secret: `HF_TOKEN`: Used to write backups to the Dataset (must have write permission to that Dataset)
-- Secret: `OPENCLAW_GATEWAY_TOKEN`: Fixed gateway token
-- Secret: `OPENCLAW_GATEWAY_PASSWORD`: Gateway password (optional)
+- Secret: `OPENCLAW_GATEWAY_TOKEN`: Gateway token (recommended; if omitted in deployment workflow, generate a random 32-character value)
+- Secret: `OPENCLAW_GATEWAY_PASSWORD`: Gateway password (optional; if omitted in deployment workflow, generate a random 16-character value)
+
+When using `./scripts/bootstrap-hf.sh`, these values are configured automatically on the target Space.
 
 ## Optional LLM Variables (All-Or-None)
 
@@ -56,6 +58,7 @@ In that case, you can still configure from inside the container (for example via
 - `OPENCLAW_LLM_MODEL` (unset by default; used only when custom model preconfiguration is enabled)
 - `OPENCLAW_LLM_PROVIDER` (default: `thirdparty`)
 - `OPENCLAW_LLM_API` (default: `openai-completions`)
+- `OPENCLAW_VERSION` (used by Docker install step; bootstrap prompts for it and defaults to the latest version detected from npm registry, fallback `latest`)
 - `OPENCLAW_STATE_DIR` (default: `/root/.openclaw`)
 - `OPENCLAW_USER` (default: `root`, runtime user for gateway and cron jobs)
 - `OPENCLAW_GROUP` (default: `root`, runtime group for gateway and cron jobs)
@@ -65,6 +68,7 @@ In that case, you can still configure from inside the container (for example via
 - `OPENCLAW_BACKUP_SOURCE_DIR` (default: `/root`, backup/restore base directory)
 - `OPENCLAW_BACKUP_PATH_PREFIX` (default: `backups`)
 - `OPENCLAW_BACKUP_LATEST_NAME` (default: `latest-backup.tar.gz`)
+- `OPENCLAW_BACKUP_KEEP_COUNT` (default: `48`, keep newest N timestamped backup archives; older ones are auto-deleted)
 - `OPENCLAW_SSHX_AUTO_START` (default: `false`; set `true` to auto-run `sshx` in background on startup)
 - `OPENCLAW_GATEWAY_AUTH_MODE` (default: `token`, optional: `password`)
 - `OPENCLAW_GATEWAY_CONTROLUI_ALLOW_INSECURE_AUTH` (default: `false`)
@@ -72,22 +76,32 @@ In that case, you can still configure from inside the container (for example via
 
 ## Quick Deployment
 
-1. Create a private Space and a private Dataset
+Run the interactive bootstrap script from repo root:
 
 ```bash
-./scripts/bootstrap-hf.sh <space_repo_id> <dataset_repo_id>
-# Example:
-# ./scripts/bootstrap-hf.sh yourname/openclaw-hf yourname/openclaw-hf-backup
+./scripts/bootstrap-hf.sh
 ```
 
-2. Upload this repository to the Space
+`bootstrap-hf.sh` will:
 
-```bash
-hf upload <space_repo_id> . --repo-type space --exclude '.git/**' --exclude '.git' \
-  --commit-message "feat: deploy openclaw on hf space"
-```
+- Check/install `hf` CLI on macOS/Linux (`curl -LsSf https://hf.co/cli/install.sh | bash`)
+- Ensure HF login (`hf auth whoami` / `hf auth login`)
+- Ask for `space_name`, `dataset_name`, `OPENCLAW_VERSION`, gateway token/password, and optional LLM settings
+- Default `OPENCLAW_VERSION` to latest detected from npm registry (`openclaw`), fallback `latest` when detection fails
+- Auto-generate `OPENCLAW_GATEWAY_TOKEN` (32 chars) and `OPENCLAW_GATEWAY_PASSWORD` (16 chars) if left empty
+- Create private Space + Dataset and upload this repository
+- Configure Space `Variables and secrets` automatically, including:
+  - `OPENCLAW_BACKUP_DATASET_REPO`
+  - `OPENCLAW_VERSION`
+  - `HF_TOKEN`
+  - `OPENCLAW_GATEWAY_TOKEN`
+  - `OPENCLAW_GATEWAY_PASSWORD`
+  - `OPENCLAW_GATEWAY_CONTROLUI_ALLOW_INSECURE_AUTH=true`
+  - `OPENCLAW_GATEWAY_CONTROLUI_DANGEROUSLY_DISABLE_DEVICE_AUTH=true`
+- Optionally configure LLM triplet and `OPENCLAW_SSHX_AUTO_START=true`
+- Optionally restart Space, then print Space URL and `/healthz`
 
-3. Configure the variables/secrets above in Space settings, then restart the Space
+If gateway token/password were auto-generated, the script prints them at the end.
 
 ## Agent Hand-off Prompt
 
@@ -104,264 +118,92 @@ Please deploy OpenClaw to Hugging Face by strictly following the "Agent Deployme
 
 This runbook is for agents that need to deploy this repo to Hugging Face.
 
-### 1. Preflight check: ensure `git` and `hf` CLI are installed
+Deployment must reuse `./scripts/bootstrap-hf.sh`. Do not hand-roll a separate deployment flow unless the user explicitly asks for a manual fallback.
 
-Agent must check tools first:
+### 1. Preflight check before collecting inputs
+
+Agent must check these dependencies first:
 
 ```bash
 command -v git >/dev/null 2>&1 || MISSING_GIT=1
 command -v hf >/dev/null 2>&1 || MISSING_HF=1
+command -v python3 >/dev/null 2>&1 || MISSING_PYTHON3=1
 ```
 
-If any tool is missing, agent should install automatically (based on OS/package manager):
+If missing:
 
-```bash
-# macOS (Homebrew)
-if command -v brew >/dev/null 2>&1; then
-  [ "${MISSING_GIT:-0}" = "1" ] && brew install git
-  [ "${MISSING_HF:-0}" = "1" ] && brew install huggingface-cli
-fi
-
-# Ubuntu/Debian
-if command -v apt-get >/dev/null 2>&1; then
-  [ "${MISSING_GIT:-0}" = "1" ] && sudo apt-get update && sudo apt-get install -y git
-  if [ "${MISSING_HF:-0}" = "1" ]; then
-    sudo apt-get update
-    sudo apt-get install -y python3-pip
-    python3 -m pip install --user --break-system-packages "huggingface_hub[cli]"
-  fi
-fi
-```
+- `git`: install with the OS package manager.
+- `hf`:
+  - macOS/Linux: `curl -LsSf https://hf.co/cli/install.sh | bash`
+  - Windows PowerShell: `powershell -ExecutionPolicy ByPass -c "irm https://hf.co/cli/install.ps1 | iex"`
+- `python3`: install with the OS package manager or official installer.
 
 Then verify:
 
 ```bash
 git --version
 hf version
+python3 --version
 ```
 
-### 2. Collect required inputs from user first
-
-Agent must ask the user for inputs in one consolidated message, then wait for response.
-Before asking, detect whether HF CLI is already logged in:
+`bootstrap-hf.sh` also depends on Python package `huggingface_hub`:
 
 ```bash
-HF_AUTH_LOGGED_IN=0
-if hf auth whoami >/dev/null 2>&1; then
-  HF_AUTH_LOGGED_IN=1
-fi
+python3 -c "import huggingface_hub" >/dev/null 2>&1 || \
+  python3 -m pip install --user 'huggingface_hub[cli]'
 ```
 
-Required user inputs:
+### 2. Ask user for inputs in the same order as `bootstrap-hf.sh` (with explanations)
 
-- `OPENCLAW_GATEWAY_TOKEN`
-- `OPENCLAW_GATEWAY_PASSWORD`
-- `space_name`
-- `dataset_name`
+Agent should ask in one consolidated message, in this order:
 
-Conditional required user input:
+1. `space_name` (default `openclaw-hf`): Space repo suffix, final ID is `<hf_username>/<space_name>`.
+2. `dataset_name` (default `<space_name>-backup`): backup Dataset suffix, final ID is `<hf_username>/<dataset_name>`.
+3. `OPENCLAW_VERSION` (default: latest version detected from npm, fallback `latest`): controls OpenClaw version installed in the container.
+4. `OPENCLAW_GATEWAY_TOKEN` (optional secret): if empty, script auto-generates 32 random characters and prints it at the end.
+5. `OPENCLAW_GATEWAY_PASSWORD` (optional secret): if empty, script auto-generates 16 random characters and prints it at the end.
+6. `HF_TOKEN for backup dataset` (optional secret): if empty, script reuses current local HF login token; token must have write access to the backup Dataset.
+7. `Configure custom LLM now?` (`y/N`):
+   - if `yes`, collect all 3: `OPENCLAW_LLM_BASE_URL`, `OPENCLAW_LLM_MODEL`, `OPENCLAW_LLM_API_KEY`.
+   - if `no`, ask whether to set `OPENCLAW_SSHX_AUTO_START=true` (`Y/n`) for later sshx-based setup.
+8. `Restart Space at the end?` (`Y/n`).
 
-- If `HF_AUTH_LOGGED_IN=1`, ask user to choose `hf_auth_mode`:
-  - `current-login`: use current local `hf auth` login session
-  - `new-token`: use a user-provided `HF_TOKEN` for this deployment
-- If `HF_AUTH_LOGGED_IN=0`, do not ask for mode selection. Require `HF_TOKEN` directly.
-- `HF_TOKEN` (secret) is required when:
-  - `HF_AUTH_LOGGED_IN=0`, or
-  - `HF_AUTH_LOGGED_IN=1` and user selects `hf_auth_mode=new-token`.
-  Agent must explain that it will backup the current local HF token state first, use this token for deployment, then restore the previous local token state after deployment.
+If `hf auth whoami` is not logged in, explain that the script will run `hf auth login` before deployment.
 
-Optional user inputs (all-or-none, only for preconfiguring a custom model):
+### 3. Execute deployment via script
 
-- `OPENCLAW_LLM_BASE_URL`
-- `OPENCLAW_LLM_MODEL`
-- `OPENCLAW_LLM_API_KEY`
-
-If user skips the optional LLM triplet, agent must continue without custom model preconfiguration and ask:
-
-- Whether to set `OPENCLAW_SSHX_AUTO_START=true` so user can configure LLM via `sshx` after startup.
-
-When asking for missing values, agent must only ask for missing required keys. The optional LLM triplet above should be offered as an all-or-none option, not treated as required.
-
-Before asking for values, agent must pick explanation language from runtime context:
-
-- If user explicitly asks for a language, use that language.
-- Else infer from agent environment language (`LC_ALL`, `LC_MESSAGES`, `LANG`).
-- Fallback to English when language cannot be inferred.
-
-Reference detection command:
+From repo root:
 
 ```bash
-USER_LANG="${LC_ALL:-${LC_MESSAGES:-${LANG:-en_US.UTF-8}}}"
+./scripts/bootstrap-hf.sh
 ```
 
-Agent must explain what each variable is used for in the selected language when asking user to provide values:
+Agent should follow the script prompts step by step using the user-provided values in the same order.
 
-- `hf_auth_mode` (conditional, only ask when HF already logged in): whether to deploy with current HF login (`current-login`) or a new token (`new-token`).
-- `HF_TOKEN` (conditional): HF token used when HF is not logged in, or when `hf_auth_mode=new-token`.
-- `OPENCLAW_LLM_BASE_URL` (optional): LLM API base URL endpoint.
-- `OPENCLAW_LLM_MODEL` (optional): LLM model ID used by OpenClaw.
-- `OPENCLAW_LLM_API_KEY` (optional): LLM provider API key (secret).
-- `OPENCLAW_GATEWAY_TOKEN`: gateway token for token auth mode (secret).
-- `OPENCLAW_GATEWAY_PASSWORD`: gateway password for password auth mode (secret).
-- `space_name`: Hugging Face Space name; final repo ID becomes `<hf_username>/<space_name>`.
-- `dataset_name`: Hugging Face Dataset name for backup; final repo ID becomes `<hf_username>/<dataset_name>`.
+The script will complete all deployment actions:
 
-Recommended question template:
+- create private Space and private Dataset
+- upload repository to the Space
+- configure Space variables and secrets (including `OPENCLAW_BACKUP_DATASET_REPO`, `OPENCLAW_VERSION`, `HF_TOKEN`, gateway credentials, and optional LLM/SSHX settings)
+- set:
+  - `OPENCLAW_GATEWAY_CONTROLUI_ALLOW_INSECURE_AUTH=true`
+  - `OPENCLAW_GATEWAY_CONTROLUI_DANGEROUSLY_DISABLE_DEVICE_AUTH=true`
+- optionally restart the Space
 
-```text
-I checked your local HF login status first.
-
-If HF is already logged in:
-- Please choose auth mode:
-  - current-login: use your current local hf login account
-  - new-token: use a new HF_TOKEN for this deployment (I will backup local token first and restore it after deployment)
-
-If HF is not logged in:
-- I will use a new HF_TOKEN for this deployment by default.
-
-Please provide these required values:
-- OPENCLAW_GATEWAY_TOKEN: gateway token for token auth mode (secret)
-- OPENCLAW_GATEWAY_PASSWORD: gateway password for password auth mode (secret)
-- space_name: Space name (final repo: <hf_username>/<space_name>)
-- dataset_name: Dataset name (final repo: <hf_username>/<dataset_name>)
-
-If HF is not logged in, or if you choose new-token mode, also provide:
-- HF_TOKEN: token with write access to the target Space and Dataset
-
-Optional (provide all 3 together only if you want custom LLM preconfiguration now):
-- OPENCLAW_LLM_BASE_URL
-- OPENCLAW_LLM_MODEL
-- OPENCLAW_LLM_API_KEY
-
-If you skip optional LLM preconfiguration, do you want me to set OPENCLAW_SSHX_AUTO_START=true so you can configure via sshx later?
-```
-
-On follow-up turns, agent must ask only for missing required keys (do not repeatedly ask for values already provided).
-
-### 3. Backup HF token, authenticate according to login status/mode, derive IDs, and clone repo
-
-Before switching auth context, backup current local HF token state:
-
-```bash
-HF_TOKEN_FILE="$HOME/.cache/huggingface/token"
-HF_TOKEN_BACKUP_FILE="$HOME/.cache/huggingface/token.openclaw.backup"
-HF_TOKEN_BACKUP_STATE_FILE="$HOME/.cache/huggingface/token.openclaw.backup.state"
-
-mkdir -p "$(dirname "$HF_TOKEN_FILE")"
-if [ -f "$HF_TOKEN_FILE" ]; then
-  cp "$HF_TOKEN_FILE" "$HF_TOKEN_BACKUP_FILE"
-  printf 'present\n' > "$HF_TOKEN_BACKUP_STATE_FILE"
-else
-  rm -f "$HF_TOKEN_BACKUP_FILE"
-  printf 'absent\n' > "$HF_TOKEN_BACKUP_STATE_FILE"
-fi
-```
-
-If `HF_AUTH_LOGGED_IN=1` and `hf_auth_mode=current-login`:
-
-```bash
-hf auth whoami
-```
-
-If this check unexpectedly fails, switch to the `HF_AUTH_LOGGED_IN=0` path and request `HF_TOKEN` from user.
-
-Then derive `HF_TOKEN` from local HF CLI credentials:
-
-```bash
-HF_TOKEN="$(cat "$HF_TOKEN_FILE")"
-```
-
-If `HF_AUTH_LOGGED_IN=0`, or if `HF_AUTH_LOGGED_IN=1` and `hf_auth_mode=new-token`:
-
-```bash
-HF_TOKEN="<USER_PROVIDED_HF_TOKEN>"
-hf auth login --token "$HF_TOKEN"
-hf auth whoami
-```
-
-Derive `hf_username`, `space_repo_id`, and `dataset_repo_id` from HF CLI login + user-provided names (do not ask user for full repo IDs):
-
-```bash
-HF_USERNAME="$(hf auth whoami | awk '{print $2}')"
-space_repo_id="${HF_USERNAME}/${space_name}"
-dataset_repo_id="${HF_USERNAME}/${dataset_name}"
-```
-
-Then clone this repo:
-
-```bash
-git clone https://github.com/tenfyzhong/openclaw-hf openclaw-hf
-cd openclaw-hf
-```
-
-Use values to set:
-
-- Required secrets: `OPENCLAW_GATEWAY_TOKEN`, `OPENCLAW_GATEWAY_PASSWORD`, `HF_TOKEN` (from selected auth mode)
-- Required variables: `OPENCLAW_BACKUP_DATASET_REPO`
-- Optional LLM values (set together): `OPENCLAW_LLM_BASE_URL`, `OPENCLAW_LLM_MODEL`, `OPENCLAW_LLM_API_KEY`
-- Optional access helper: `OPENCLAW_SSHX_AUTO_START=true` (recommended when skipping LLM preconfiguration and you plan to configure via `sshx`)
-
-Agent must also set these additional variables:
-
-- `OPENCLAW_GATEWAY_CONTROLUI_ALLOW_INSECURE_AUTH=true`
-- `OPENCLAW_GATEWAY_CONTROLUI_DANGEROUSLY_DISABLE_DEVICE_AUTH=true`
-
-When guiding user to configure these values, agent must explain the purpose of each key in the user's language:
-
-- `HF_TOKEN`: Hugging Face token with write permission to the backup dataset.
-- `OPENCLAW_BACKUP_DATASET_REPO`: backup dataset repo ID (`<hf_username>/<dataset_name>`).
-- `OPENCLAW_GATEWAY_CONTROLUI_ALLOW_INSECURE_AUTH`: allows insecure auth behavior in Control UI (development/testing usage only).
-- `OPENCLAW_GATEWAY_CONTROLUI_DANGEROUSLY_DISABLE_DEVICE_AUTH`: disables device auth flow in Control UI (high risk; use only when explicitly intended).
-
-### 4. Create Space + Dataset and upload code to Hugging Face
-
-```bash
-hf repo create "$space_repo_id" --repo-type space --space-sdk docker --private --exist-ok
-hf repo create "$dataset_repo_id" --repo-type dataset --private --exist-ok
-
-hf upload "$space_repo_id" . --repo-type space --exclude '.git/**' --exclude '.git' \
-  --commit-message "feat: deploy openclaw to hf space"
-```
-
-Then configure the Space Settings (`Variables and secrets`) using all values above, restart the Space, and verify `/healthz`.
-
-### 5. Final user hand-off (required)
-
-Before final response, restore local HF token state from backup:
-
-```bash
-HF_TOKEN_FILE="$HOME/.cache/huggingface/token"
-HF_TOKEN_BACKUP_FILE="$HOME/.cache/huggingface/token.openclaw.backup"
-HF_TOKEN_BACKUP_STATE_FILE="$HOME/.cache/huggingface/token.openclaw.backup.state"
-
-if [ -f "$HF_TOKEN_BACKUP_STATE_FILE" ]; then
-  if [ "$(cat "$HF_TOKEN_BACKUP_STATE_FILE")" = "present" ] && [ -f "$HF_TOKEN_BACKUP_FILE" ]; then
-    cp "$HF_TOKEN_BACKUP_FILE" "$HF_TOKEN_FILE"
-  else
-    rm -f "$HF_TOKEN_FILE"
-  fi
-  rm -f "$HF_TOKEN_BACKUP_FILE" "$HF_TOKEN_BACKUP_STATE_FILE"
-fi
-```
-
-After deployment is complete and local HF token state is restored, agent must show final access URLs and remind the user about keep-alive.
-
-Build URLs from `space_repo_id`:
-
-```bash
-space_host="${space_repo_id/\//-}.hf.space"
-app_url="https://${space_host}"
-health_url="${app_url}/healthz"
-```
+### 4. Final hand-off to user (required)
 
 Agent final message must include:
 
 - Space repo ID: `<owner>/<space_name>`
+- Dataset repo ID: `<owner>/<dataset_name>`
+- `OPENCLAW_VERSION` used
 - App URL: `https://<owner>-<space_name>.hf.space`
 - Health URL: `https://<owner>-<space_name>.hf.space/healthz`
+- If auto-generated, include `OPENCLAW_GATEWAY_TOKEN`
+- If auto-generated, include `OPENCLAW_GATEWAY_PASSWORD`
 - Keep-alive reminder:
-  - For strict 24/7 uptime, use paid hardware and set `Sleep time` to `Never`.
-  - On free tier, remind user the Space may sleep after inactivity and suggest periodic health checks as a workaround.
+  - paid hardware + `Sleep time=Never` for strict 24/7 uptime
+  - free tier may sleep after inactivity
 
 </details>
 
@@ -438,6 +280,7 @@ For this project, if you need stable dashboard access without cold starts, use p
   - `backups/openclaw-backup-<timestamp>.tar.gz`
   - `latest-backup.tar.gz`
   - `latest-backup.json`
+- Retention: after upload, only the newest `OPENCLAW_BACKUP_KEEP_COUNT` timestamped archives are kept (default `48`); older timestamped archives are deleted automatically
 
 ## Use sshx Inside the Container
 

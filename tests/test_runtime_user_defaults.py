@@ -17,11 +17,16 @@ class RuntimeUserDefaultsTests(unittest.TestCase):
 
     def test_dockerfile_defaults_to_root_runtime_home(self):
         dockerfile = self._dockerfile_path().read_text(encoding="utf-8")
+        self.assertIn("ARG OPENCLAW_VERSION", dockerfile)
+        self.assertIn("ENV OPENCLAW_VERSION=$OPENCLAW_VERSION", dockerfile)
+        self.assertIn('OPENCLAW_VERSION_VALUE="${OPENCLAW_VERSION:-latest}"', dockerfile)
         self.assertIn("ENV HOME=/root", dockerfile)
         self.assertIn("ENV OPENCLAW_HOME=/root", dockerfile)
         self.assertIn("ENV OPENCLAW_USER=root", dockerfile)
         self.assertIn("ENV OPENCLAW_GROUP=root", dockerfile)
-        self.assertIn("if [[ -x /root/.npm-global/bin/openclaw ]]; then", dockerfile)
+        self.assertIn('OPENCLAW_BIN="$(command -v openclaw || true)"', dockerfile)
+        self.assertIn('if [[ -z "$OPENCLAW_BIN" ]] && [[ -x /root/.npm-global/bin/openclaw ]]; then', dockerfile)
+        self.assertIn('elif [[ -z "$OPENCLAW_BIN" ]] && [[ -x /root/.local/bin/openclaw ]]; then', dockerfile)
         self.assertIn("if [ -x /root/.local/bin/sshx ]; then", dockerfile)
         self.assertNotIn("/home/ubuntu/.npm-global/bin/openclaw", dockerfile)
         self.assertNotIn("/home/ubuntu/.local/bin/sshx", dockerfile)
@@ -62,9 +67,20 @@ class RuntimeUserDefaultsTests(unittest.TestCase):
             entrypoint,
         )
 
+    def test_backup_env_file_includes_keep_count(self):
+        entrypoint = self._entrypoint_path().read_text(encoding="utf-8")
+        self.assertIn("OPENCLAW_BACKUP_KEEP_COUNT", entrypoint)
+
     def test_sshx_auto_start_does_not_use_command_substitution(self):
         entrypoint = self._entrypoint_path().read_text(encoding="utf-8")
         self.assertNotIn('OPENCLAW_SSHX_PID="$(run_as_node_background_stdout sshx)"', entrypoint)
+
+    def test_sshx_logs_directly_to_container_stdout_stderr(self):
+        entrypoint = self._entrypoint_path().read_text(encoding="utf-8")
+        self.assertIn('gosu "$OPENCLAW_USER:$OPENCLAW_GROUP" sshx >/proc/1/fd/1 2>/proc/1/fd/2 &', entrypoint)
+        self.assertIn("sshx >/proc/1/fd/1 2>/proc/1/fd/2 &", entrypoint)
+        self.assertNotIn('gosu "$OPENCLAW_USER:$OPENCLAW_GROUP" sshx >>"$OPENCLAW_STDOUT_LOG_PATH" 2>>"$OPENCLAW_STDERR_LOG_PATH" &', entrypoint)
+        self.assertNotIn('sshx >>"$OPENCLAW_STDOUT_LOG_PATH" 2>>"$OPENCLAW_STDERR_LOG_PATH" &', entrypoint)
 
 
 if __name__ == "__main__":
