@@ -3,8 +3,8 @@
 FROM ubuntu:24.04
 
 ARG DEBIAN_FRONTEND=noninteractive
-ARG OPENCLAW_VERSION=latest
-ENV OPENCLAW_VERSION=${OPENCLAW_VERSION}
+ARG OPENCLAW_VERSION
+ENV OPENCLAW_VERSION=$OPENCLAW_VERSION
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -23,8 +23,9 @@ RUN apt-get update && \
       tar && \
     rm -rf /var/lib/apt/lists/*
 
-RUN HOME=/root /bin/bash -lc \
-    "curl -fsSL https://openclaw.ai/install.sh | bash -s -- --no-onboard --version \"${OPENCLAW_VERSION}\""
+RUN /bin/bash -lc 'set -euo pipefail; \
+    OPENCLAW_VERSION_VALUE="${OPENCLAW_VERSION:-latest}"; \
+    HOME=/root curl -fsSL https://openclaw.ai/install.sh | bash -s -- --no-onboard --version "$OPENCLAW_VERSION_VALUE"'
 
 RUN /bin/bash -lc 'set -euo pipefail; \
     OPENCLAW_BIN="$(command -v openclaw || true)"; \
