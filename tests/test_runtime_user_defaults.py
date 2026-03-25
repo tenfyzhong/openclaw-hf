@@ -68,6 +68,13 @@ class RuntimeUserDefaultsTests(unittest.TestCase):
         entrypoint = self._entrypoint_path().read_text(encoding="utf-8")
         self.assertNotIn('OPENCLAW_SSHX_PID="$(run_as_node_background_stdout sshx)"', entrypoint)
 
+    def test_sshx_logs_directly_to_container_stdout_stderr(self):
+        entrypoint = self._entrypoint_path().read_text(encoding="utf-8")
+        self.assertIn('gosu "$OPENCLAW_USER:$OPENCLAW_GROUP" sshx >/proc/1/fd/1 2>/proc/1/fd/2 &', entrypoint)
+        self.assertIn("sshx >/proc/1/fd/1 2>/proc/1/fd/2 &", entrypoint)
+        self.assertNotIn('gosu "$OPENCLAW_USER:$OPENCLAW_GROUP" sshx >>"$OPENCLAW_STDOUT_LOG_PATH" 2>>"$OPENCLAW_STDERR_LOG_PATH" &', entrypoint)
+        self.assertNotIn('sshx >>"$OPENCLAW_STDOUT_LOG_PATH" 2>>"$OPENCLAW_STDERR_LOG_PATH" &', entrypoint)
+
 
 if __name__ == "__main__":
     unittest.main()
