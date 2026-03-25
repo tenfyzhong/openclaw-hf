@@ -82,6 +82,13 @@ class RuntimeUserDefaultsTests(unittest.TestCase):
         self.assertNotIn('gosu "$OPENCLAW_USER:$OPENCLAW_GROUP" sshx >>"$OPENCLAW_STDOUT_LOG_PATH" 2>>"$OPENCLAW_STDERR_LOG_PATH" &', entrypoint)
         self.assertNotIn('sshx >>"$OPENCLAW_STDOUT_LOG_PATH" 2>>"$OPENCLAW_STDERR_LOG_PATH" &', entrypoint)
 
+    def test_docker_healthcheck_does_not_send_gateway_token_header(self):
+        dockerfile = self._dockerfile_path().read_text(encoding="utf-8")
+        self.assertIn("HEALTHCHECK --interval=30s --timeout=5s --start-period=25s --retries=5", dockerfile)
+        self.assertIn('URL="http://127.0.0.1:${OPENCLAW_GATEWAY_PORT:-7860}/healthz"', dockerfile)
+        self.assertIn('curl -fsS --max-time 3 "$URL" >/dev/null', dockerfile)
+        self.assertNotIn("x-openclaw-token", dockerfile)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -101,7 +101,7 @@ ENV OPENCLAW_BACKUP_LATEST_NAME=latest-backup.tar.gz
 EXPOSE 7860
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=25s --retries=5 \
-  CMD /bin/bash -lc 'set -euo pipefail; URL="http://127.0.0.1:${OPENCLAW_GATEWAY_PORT:-7860}/healthz"; if [[ -n "${OPENCLAW_GATEWAY_TOKEN:-}" ]]; then curl -fsS --max-time 3 -H "x-openclaw-token: ${OPENCLAW_GATEWAY_TOKEN}" "$URL" >/dev/null; else curl -fsS --max-time 3 "$URL" >/dev/null; fi'
+  CMD /bin/bash -lc 'set -euo pipefail; URL="http://127.0.0.1:${OPENCLAW_GATEWAY_PORT:-7860}/healthz"; curl -fsS --max-time 3 "$URL" >/dev/null'
 
 ENTRYPOINT ["/usr/local/bin/openclaw-entrypoint.sh"]
 CMD ["gateway"]
