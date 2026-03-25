@@ -27,7 +27,7 @@ This setup is designed to provide the following:
 - `openclaw_hf/backup.py`: Backup/restore implementation
 - `scripts/openclaw-backup-cron.sh`: Cron entrypoint for backup jobs
 - `scripts/openclaw-restore.sh`: Startup restore entrypoint
-- `scripts/bootstrap-hf.sh`: Helper script to create a Space + Dataset
+- `scripts/bootstrap-hf.sh`: Interactive bootstrap for Space/Dataset creation, upload, and Space variables/secrets setup
 - `tests/test_backup.py`: Unit tests for the backup module
 - `tests/test_entrypoint_config.py`: Unit tests for gateway config generation behavior
 
@@ -39,6 +39,8 @@ In your Hugging Face Space (`Settings -> Variables and secrets`), configure at l
 - Secret: `HF_TOKEN`: Used to write backups to the Dataset (must have write permission to that Dataset)
 - Secret: `OPENCLAW_GATEWAY_TOKEN`: Gateway token (recommended; if omitted in deployment workflow, generate a random 32-character value)
 - Secret: `OPENCLAW_GATEWAY_PASSWORD`: Gateway password (optional; if omitted in deployment workflow, generate a random 16-character value)
+
+When using `./scripts/bootstrap-hf.sh`, these values are configured automatically on the target Space.
 
 ## Optional LLM Variables (All-Or-None)
 
@@ -72,113 +74,30 @@ In that case, you can still configure from inside the container (for example via
 
 ## Quick Deployment
 
-1. Ensure `git` and `hf` CLI are available
+Run the interactive bootstrap script from repo root:
 
 ```bash
-command -v git >/dev/null 2>&1 || { echo "Please install git first."; exit 1; }
-command -v hf >/dev/null 2>&1 || MISSING_HF=1
-
-# macOS/Linux
-if [ "${MISSING_HF:-0}" = "1" ]; then
-  curl -LsSf https://hf.co/cli/install.sh | bash
-fi
-
-# verify
-git --version
-hf version
+./scripts/bootstrap-hf.sh
 ```
 
-Windows HF CLI install command:
+`bootstrap-hf.sh` will:
 
-```powershell
-powershell -ExecutionPolicy ByPass -c "irm https://hf.co/cli/install.ps1 | iex"
-```
-
-2. Login Hugging Face CLI (or reuse current login)
-
-```bash
-hf auth whoami || hf auth login
-hf auth whoami
-```
-
-3. Set deployment names and normalize gateway credentials
-
-```bash
-space_name="<your-space-name>"
-dataset_name="<your-dataset-name>"
-
-# Optional: provide by yourself
-# OPENCLAW_GATEWAY_TOKEN="<your-token>"
-# OPENCLAW_GATEWAY_PASSWORD="<your-password>"
-
-GENERATED_OPENCLAW_GATEWAY_TOKEN=0
-GENERATED_OPENCLAW_GATEWAY_PASSWORD=0
-
-if [ -z "${OPENCLAW_GATEWAY_TOKEN:-}" ]; then
-  OPENCLAW_GATEWAY_TOKEN="$(openssl rand -hex 16)"
-  GENERATED_OPENCLAW_GATEWAY_TOKEN=1
-fi
-
-if [ -z "${OPENCLAW_GATEWAY_PASSWORD:-}" ]; then
-  OPENCLAW_GATEWAY_PASSWORD="$(openssl rand -hex 8)"
-  GENERATED_OPENCLAW_GATEWAY_PASSWORD=1
-fi
-```
-
-4. Derive repo IDs from current HF user, create Space + Dataset, and upload code
-
-```bash
-HF_USERNAME="$(hf auth whoami | awk '{print $2}')"
-space_repo_id="${HF_USERNAME}/${space_name}"
-dataset_repo_id="${HF_USERNAME}/${dataset_name}"
-
-hf repo create "$space_repo_id" --repo-type space --space-sdk docker --private --exist-ok
-hf repo create "$dataset_repo_id" --repo-type dataset --private --exist-ok
-
-hf upload "$space_repo_id" . --repo-type space --exclude '.git/**' --exclude '.git' \
-  --commit-message "feat: deploy openclaw to hf space"
-```
-
-Optional helper (create Space + Dataset only):
-
-```bash
-./scripts/bootstrap-hf.sh "$space_repo_id" "$dataset_repo_id"
-```
-
-5. In Space `Settings -> Variables and secrets`, configure:
-
-- Required variables/secrets:
-  - `OPENCLAW_BACKUP_DATASET_REPO=$dataset_repo_id`
-  - `HF_TOKEN=<token with write access to $dataset_repo_id>`
-  - `OPENCLAW_GATEWAY_TOKEN=$OPENCLAW_GATEWAY_TOKEN`
-- Optional:
-  - `OPENCLAW_GATEWAY_PASSWORD=$OPENCLAW_GATEWAY_PASSWORD`
-  - `OPENCLAW_LLM_BASE_URL`, `OPENCLAW_LLM_MODEL`, `OPENCLAW_LLM_API_KEY` (all-or-none)
-  - `OPENCLAW_SSHX_AUTO_START=true` (if you plan to configure LLM via `sshx` later)
-- Additional SOP-required flags:
+- Check/install `hf` CLI on macOS/Linux (`curl -LsSf https://hf.co/cli/install.sh | bash`)
+- Ensure HF login (`hf auth whoami` / `hf auth login`)
+- Ask for `space_name`, `dataset_name`, gateway token/password, and optional LLM settings
+- Auto-generate `OPENCLAW_GATEWAY_TOKEN` (32 chars) and `OPENCLAW_GATEWAY_PASSWORD` (16 chars) if left empty
+- Create private Space + Dataset and upload this repository
+- Configure Space `Variables and secrets` automatically, including:
+  - `OPENCLAW_BACKUP_DATASET_REPO`
+  - `HF_TOKEN`
+  - `OPENCLAW_GATEWAY_TOKEN`
+  - `OPENCLAW_GATEWAY_PASSWORD`
   - `OPENCLAW_GATEWAY_CONTROLUI_ALLOW_INSECURE_AUTH=true`
   - `OPENCLAW_GATEWAY_CONTROLUI_DANGEROUSLY_DISABLE_DEVICE_AUTH=true`
+- Optionally configure LLM triplet and `OPENCLAW_SSHX_AUTO_START=true`
+- Optionally restart Space, then print Space URL and `/healthz`
 
-Then restart the Space and verify health:
-
-```bash
-space_host="${space_repo_id/\//-}.hf.space"
-app_url="https://${space_host}"
-health_url="${app_url}/healthz"
-echo "$app_url"
-echo "$health_url"
-```
-
-6. If gateway credentials were auto-generated, save them from terminal output:
-
-```bash
-if [ "$GENERATED_OPENCLAW_GATEWAY_TOKEN" = "1" ]; then
-  echo "Generated OPENCLAW_GATEWAY_TOKEN=$OPENCLAW_GATEWAY_TOKEN"
-fi
-if [ "$GENERATED_OPENCLAW_GATEWAY_PASSWORD" = "1" ]; then
-  echo "Generated OPENCLAW_GATEWAY_PASSWORD=$OPENCLAW_GATEWAY_PASSWORD"
-fi
-```
+If gateway token/password were auto-generated, the script prints them at the end.
 
 ## Agent Hand-off Prompt
 
