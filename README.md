@@ -66,7 +66,7 @@ In that case, you can still configure from inside the container (for example via
 - `OPENCLAW_CONFIG_PATH` (default: `/root/.openclaw/openclaw.json`)
 - `OPENCLAW_WORKSPACE_DIR` (default: `/root/.openclaw/workspace`)
 - `OPENCLAW_BACKUP_CRON` (default: `*/30 * * * *`, backup every 30 minutes)
-- `OPENCLAW_BACKUP_SOURCE_DIR` (default: `/root`, backup/restore base directory)
+- `OPENCLAW_BACKUP_SOURCE_DIR` (default: `/root/.openclaw`, backup/restore base directory)
 - `OPENCLAW_BACKUP_PATH_PREFIX` (default: `backups`)
 - `OPENCLAW_BACKUP_LATEST_NAME` (default: `latest-backup.tar.gz`)
 - `OPENCLAW_BACKUP_KEEP_COUNT` (default: `48`, keep newest N timestamped backup archives; older ones are auto-deleted)
@@ -291,7 +291,7 @@ For this project, if you need stable dashboard access without cold starts, use p
 
 ## Backup/Restore Flow
 
-- Startup restore: on container startup, it tries to fetch `latest-backup.tar.gz` from the Dataset and restore it to `OPENCLAW_BACKUP_SOURCE_DIR` (default `/root`)
+- Startup restore: on container startup, it tries to fetch `latest-backup.tar.gz` from the Dataset and restore it to `OPENCLAW_BACKUP_SOURCE_DIR` (default `/root/.openclaw`)
 - Scheduled backup: cron runs based on `OPENCLAW_BACKUP_CRON`
 - Shutdown backup: when the container receives a stop signal, one final backup is uploaded before exit
 - Each backup upload includes:

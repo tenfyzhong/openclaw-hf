@@ -30,7 +30,7 @@ class FakeApi:
 
 
 class BackupTests(unittest.TestCase):
-    def test_from_env_defaults_to_root_paths(self):
+    def test_from_env_defaults_backup_source_to_state_dir(self):
         env = {
             "OPENCLAW_BACKUP_DATASET_REPO": "user/demo-backup",
         }
@@ -38,8 +38,24 @@ class BackupTests(unittest.TestCase):
             config = BackupConfig.from_env()
 
         self.assertEqual(config.state_dir, Path("/root/.openclaw").resolve())
-        self.assertEqual(config.backup_source_dir, Path("/root").resolve())
+        self.assertEqual(config.backup_source_dir, config.state_dir)
         self.assertEqual(config.keep_count, 48)
+
+    def test_from_env_defaults_backup_source_to_explicit_state_dir_when_unset(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            state_dir = tmp_path / "state"
+            state_dir.mkdir(parents=True)
+
+            env = {
+                "OPENCLAW_BACKUP_DATASET_REPO": "user/demo-backup",
+                "OPENCLAW_STATE_DIR": str(state_dir),
+            }
+            with mock.patch.dict("os.environ", env, clear=True):
+                config = BackupConfig.from_env()
+
+            self.assertEqual(config.state_dir, state_dir.resolve())
+            self.assertEqual(config.backup_source_dir, state_dir.resolve())
 
     def test_from_env_uses_explicit_backup_source_dir(self):
         with tempfile.TemporaryDirectory() as tmp:
