@@ -57,7 +57,11 @@ class BackupConfig:
             raise ValueError("OPENCLAW_BACKUP_DATASET_REPO is not set")
 
         state_dir = Path(os.getenv("OPENCLAW_STATE_DIR", "/root/.openclaw")).resolve()
-        backup_source_dir = Path(os.getenv("OPENCLAW_BACKUP_SOURCE_DIR", "/root")).resolve()
+        backup_source_raw = (os.getenv("OPENCLAW_BACKUP_SOURCE_DIR") or "").strip()
+        if backup_source_raw:
+            backup_source_dir = Path(backup_source_raw).resolve()
+        else:
+            backup_source_dir = state_dir
         work_dir = Path(os.getenv("OPENCLAW_BACKUP_WORK_DIR", "/tmp/openclaw-backup")).resolve()
         repo_type = (os.getenv("OPENCLAW_BACKUP_REPO_TYPE") or "dataset").strip() or "dataset"
         path_prefix = (os.getenv("OPENCLAW_BACKUP_PATH_PREFIX") or "backups").strip("/")
