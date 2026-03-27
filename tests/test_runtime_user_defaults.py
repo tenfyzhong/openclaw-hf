@@ -25,6 +25,7 @@ class RuntimeUserDefaultsTests(unittest.TestCase):
         self.assertIn("ENV OPENCLAW_USER=root", dockerfile)
         self.assertIn("ENV OPENCLAW_GROUP=root", dockerfile)
         self.assertIn("ENV OPENCLAW_BACKUP_SOURCE_DIR=/root/.openclaw", dockerfile)
+        self.assertIn("ENV OPENCLAW_BACKUP_ROOT_CONFIG_DIR=/root/.config", dockerfile)
         self.assertIn('OPENCLAW_BIN="$(command -v openclaw || true)"', dockerfile)
         self.assertIn('if [[ -z "$OPENCLAW_BIN" ]] && [[ -x /root/.npm-global/bin/openclaw ]]; then', dockerfile)
         self.assertIn('elif [[ -z "$OPENCLAW_BIN" ]] && [[ -x /root/.local/bin/openclaw ]]; then', dockerfile)
@@ -55,6 +56,7 @@ class RuntimeUserDefaultsTests(unittest.TestCase):
         self.assertIn('OPENCLAW_GROUP="${OPENCLAW_GROUP:-root}"', entrypoint)
         self.assertIn('OPENCLAW_HOME="${OPENCLAW_HOME:-/root}"', entrypoint)
         self.assertIn('OPENCLAW_BACKUP_SOURCE_DIR="${OPENCLAW_BACKUP_SOURCE_DIR:-${OPENCLAW_STATE_DIR}}"', entrypoint)
+        self.assertIn('OPENCLAW_BACKUP_ROOT_CONFIG_DIR="${OPENCLAW_BACKUP_ROOT_CONFIG_DIR:-/root/.config}"', entrypoint)
 
     def test_backup_cron_uses_openclaw_user(self):
         entrypoint = self._entrypoint_path().read_text(encoding="utf-8")
@@ -83,6 +85,7 @@ class RuntimeUserDefaultsTests(unittest.TestCase):
     def test_backup_env_file_includes_keep_count(self):
         entrypoint = self._entrypoint_path().read_text(encoding="utf-8")
         self.assertIn("OPENCLAW_BACKUP_KEEP_COUNT", entrypoint)
+        self.assertIn("OPENCLAW_BACKUP_ROOT_CONFIG_DIR", entrypoint)
 
     def test_sshx_auto_start_does_not_use_command_substitution(self):
         entrypoint = self._entrypoint_path().read_text(encoding="utf-8")

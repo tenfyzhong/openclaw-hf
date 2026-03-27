@@ -43,6 +43,7 @@ class BackupConfig:
     dataset_repo: str
     state_dir: Path
     backup_source_dir: Path
+    root_config_dir: Path
     work_dir: Path
     repo_type: str
     path_prefix: str
@@ -62,6 +63,9 @@ class BackupConfig:
             backup_source_dir = Path(backup_source_raw).resolve()
         else:
             backup_source_dir = state_dir
+        root_config_dir = Path(
+            (os.getenv("OPENCLAW_BACKUP_ROOT_CONFIG_DIR") or "/root/.config").strip() or "/root/.config"
+        ).resolve()
         work_dir = Path(os.getenv("OPENCLAW_BACKUP_WORK_DIR", "/tmp/openclaw-backup")).resolve()
         repo_type = (os.getenv("OPENCLAW_BACKUP_REPO_TYPE") or "dataset").strip() or "dataset"
         path_prefix = (os.getenv("OPENCLAW_BACKUP_PATH_PREFIX") or "backups").strip("/")
@@ -89,6 +93,7 @@ class BackupConfig:
             dataset_repo=dataset_repo,
             state_dir=state_dir,
             backup_source_dir=backup_source_dir,
+            root_config_dir=root_config_dir,
             work_dir=work_dir,
             repo_type=repo_type,
             path_prefix=path_prefix,
@@ -131,6 +136,8 @@ class OpenClawBackup:
         archive = self.config.work_dir / f"openclaw-backup-{stamp}.tar.gz"
         with tarfile.open(archive, "w:gz") as tar:
             tar.add(str(self.config.backup_source_dir), arcname="openclaw-state")
+            if self.config.root_config_dir.exists():
+                tar.add(str(self.config.root_config_dir), arcname="root-config")
 
         return archive
 
@@ -162,6 +169,7 @@ class OpenClawBackup:
             "latest": self.config.latest_name,
             "created_at_utc": utc_now().isoformat(timespec="seconds"),
             "state_root": "openclaw-state",
+            "root_config_root": "root-config",
         }
         self.api.upload_file(
             repo_id=self.config.dataset_repo,
@@ -293,6 +301,12 @@ class OpenClawBackup:
                 raise RuntimeError("backup archive missing openclaw-state directory")
 
             self.replace_dir_contents(extracted_state, self.config.backup_source_dir)
+
+            extracted_root_config = tmp_dir / "root-config"
+            if extracted_root_config.exists():
+                if not extracted_root_config.is_dir():
+                    raise RuntimeError("backup archive root-config is not a directory")
+                self.replace_dir_contents(extracted_root_config, self.config.root_config_dir)
 
         print(f"restore completed from {self.config.dataset_repo}/{self.config.latest_name}")
         return True
