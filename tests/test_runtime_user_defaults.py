@@ -38,6 +38,17 @@ class RuntimeUserDefaultsTests(unittest.TestCase):
         self.assertNotIn("ubuntu ALL=(ALL) NOPASSWD:ALL", dockerfile)
         self.assertNotIn("/etc/sudoers.d/90-ubuntu-nopasswd", dockerfile)
 
+    def test_dockerfile_preinstalls_common_cli_tools(self):
+        dockerfile = self._dockerfile_path().read_text(encoding="utf-8")
+        self.assertIn("vim; then", dockerfile)
+        self.assertIn(
+            "npm install -g --no-audit --no-fund opencode-ai @openai/codex @anthropic-ai/claude-code",
+            dockerfile,
+        )
+        self.assertIn("for cmd in opencode codex claude; do", dockerfile)
+        self.assertIn('ln -sf "$CLI_BIN" "/usr/local/bin/$cmd"', dockerfile)
+        self.assertIn('"/usr/local/bin/$cmd" --help >/dev/null', dockerfile)
+
     def test_entrypoint_defaults_to_root_runtime_user(self):
         entrypoint = self._entrypoint_path().read_text(encoding="utf-8")
         self.assertIn('OPENCLAW_USER="${OPENCLAW_USER:-root}"', entrypoint)
