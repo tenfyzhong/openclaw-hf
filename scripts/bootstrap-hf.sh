@@ -285,7 +285,6 @@ except Exception as exc:
     raise SystemExit(f"failed to restart space {repo_id}: {exc}")
 PY
 }
-
 main() {
   local hf_username
   local space_name
@@ -305,8 +304,8 @@ main() {
   local llm_model=""
   local llm_api_key=""
   local enable_sshx="no"
-  local restart_now
   local api_token
+  local space_page_url
   local space_host
   local app_url
   local health_url
@@ -372,8 +371,6 @@ main() {
     enable_sshx="$(prompt_yes_no "Set OPENCLAW_SSHX_AUTO_START=true for later sshx setup?" "y")"
   fi
 
-  restart_now="$(prompt_yes_no "Restart Space at the end?" "y")"
-
   info "Creating private Space and Dataset..."
   hf repo create "$space_repo_id" --repo-type space --space-sdk docker --private --exist-ok
   hf repo create "$dataset_repo_id" --repo-type dataset --private --exist-ok
@@ -390,8 +387,8 @@ main() {
   info "Configuring Space variables and secrets..."
   set_space_variable "$space_repo_id" "OPENCLAW_BACKUP_DATASET_REPO" "$dataset_repo_id" "$api_token"
   set_space_variable "$space_repo_id" "OPENCLAW_VERSION" "$openclaw_version" "$api_token"
-  set_space_variable "$space_repo_id" "OPENCLAW_GATEWAY_CONTROLUI_ALLOW_INSECURE_AUTH" "true" "$api_token"
-  set_space_variable "$space_repo_id" "OPENCLAW_GATEWAY_CONTROLUI_DANGEROUSLY_DISABLE_DEVICE_AUTH" "true" "$api_token"
+  set_space_variable "$space_repo_id" "OPENCLAW_GATEWAY_CONTROLUI_ALLOW_INSECURE_AUTH" "false" "$api_token"
+  set_space_variable "$space_repo_id" "OPENCLAW_GATEWAY_CONTROLUI_DANGEROUSLY_DISABLE_DEVICE_AUTH" "false" "$api_token"
   set_space_secret "$space_repo_id" "OPENCLAW_GATEWAY_TOKEN" "$gateway_token" "$api_token"
   set_space_secret "$space_repo_id" "OPENCLAW_GATEWAY_PASSWORD" "$gateway_password" "$api_token"
   set_space_secret "$space_repo_id" "HF_TOKEN" "$hf_token_for_backup" "$api_token"
@@ -400,17 +397,15 @@ main() {
     set_space_variable "$space_repo_id" "OPENCLAW_LLM_BASE_URL" "$llm_base_url" "$api_token"
     set_space_variable "$space_repo_id" "OPENCLAW_LLM_MODEL" "$llm_model" "$api_token"
     set_space_secret "$space_repo_id" "OPENCLAW_LLM_API_KEY" "$llm_api_key" "$api_token"
-  elif [[ "$enable_sshx" == "yes" ]]; then
+  fi
+
+  if [[ "$enable_sshx" == "yes" ]]; then
     set_space_variable "$space_repo_id" "OPENCLAW_SSHX_AUTO_START" "true" "$api_token"
+  else
+    set_space_variable "$space_repo_id" "OPENCLAW_SSHX_AUTO_START" "false" "$api_token"
   fi
 
-  if [[ "$restart_now" == "yes" ]]; then
-    info "Restarting Space..."
-    if ! restart_space "$space_repo_id" "$api_token"; then
-      error "Space restart failed. You can restart manually from Hugging Face Space Settings."
-    fi
-  fi
-
+  space_page_url="https://huggingface.co/spaces/${space_repo_id}"
   space_host="${space_repo_id/\//-}.hf.space"
   app_url="https://${space_host}"
   health_url="${app_url}/healthz"
@@ -418,6 +413,7 @@ main() {
   info ""
   info "Deployment complete."
   info "Space repo: $space_repo_id"
+  info "Hugging Face Space: $space_page_url"
   info "Dataset repo: $dataset_repo_id"
   info "OPENCLAW_VERSION: $openclaw_version"
   info "Space URL: $app_url"

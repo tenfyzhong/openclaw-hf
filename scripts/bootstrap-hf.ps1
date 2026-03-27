@@ -507,11 +507,6 @@ function Main {
     }
   }
 
-  $restart_now = "no"
-  Invoke-Step -Message "Collect restart preference" -Action {
-    $restart_now = Prompt-YesNo -Prompt "Restart Space at the end?" -DefaultValue "y"
-  }
-
   Invoke-Step -Message "Create Space repo $space_repo_id" -Action {
     & hf repo create $space_repo_id --repo-type space --space-sdk docker --private --exist-ok
     if ($LASTEXITCODE -ne 0) {
@@ -544,8 +539,8 @@ function Main {
 
   Set-SpaceVariableLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_BACKUP_DATASET_REPO" -Value $dataset_repo_id -ApiToken $api_token
   Set-SpaceVariableLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_VERSION" -Value $openclaw_version -ApiToken $api_token
-  Set-SpaceVariableLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_GATEWAY_CONTROLUI_ALLOW_INSECURE_AUTH" -Value "true" -ApiToken $api_token
-  Set-SpaceVariableLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_GATEWAY_CONTROLUI_DANGEROUSLY_DISABLE_DEVICE_AUTH" -Value "true" -ApiToken $api_token
+  Set-SpaceVariableLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_GATEWAY_CONTROLUI_ALLOW_INSECURE_AUTH" -Value "false" -ApiToken $api_token
+  Set-SpaceVariableLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_GATEWAY_CONTROLUI_DANGEROUSLY_DISABLE_DEVICE_AUTH" -Value "false" -ApiToken $api_token
   Set-SpaceSecretLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_GATEWAY_TOKEN" -Value $gateway_token -ApiToken $api_token
   Set-SpaceSecretLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_GATEWAY_PASSWORD" -Value $gateway_password -ApiToken $api_token
   Set-SpaceSecretLogged -SpaceRepoId $space_repo_id -Key "HF_TOKEN" -Value $hf_token_for_backup -ApiToken $api_token
@@ -554,22 +549,16 @@ function Main {
     Set-SpaceVariableLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_LLM_BASE_URL" -Value $llm_base_url -ApiToken $api_token
     Set-SpaceVariableLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_LLM_MODEL" -Value $llm_model -ApiToken $api_token
     Set-SpaceSecretLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_LLM_API_KEY" -Value $llm_api_key -ApiToken $api_token
-  } elseif ($enable_sshx -eq "yes") {
-    Set-SpaceVariableLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_SSHX_AUTO_START" -Value "true" -ApiToken $api_token
   }
 
-  if ($restart_now -eq "yes") {
-    Invoke-Step -Message "Restart Space $space_repo_id" -Action {
-      try {
-        Restart-Space -SpaceRepoId $space_repo_id -ApiToken $api_token
-      }
-      catch {
-        Write-Error "Space restart failed. You can restart manually from Hugging Face Space Settings."
-      }
-    }
+  if ($enable_sshx -eq "yes") {
+    Set-SpaceVariableLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_SSHX_AUTO_START" -Value "true" -ApiToken $api_token
+  } else {
+    Set-SpaceVariableLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_SSHX_AUTO_START" -Value "false" -ApiToken $api_token
   }
 
   Invoke-Step -Message "Print deployment summary" -Action {
+    $space_page_url = "https://huggingface.co/spaces/$space_repo_id"
     $space_host = "$($space_repo_id -replace '/', '-').hf.space"
     $app_url = "https://$space_host"
     $health_url = "$app_url/healthz"
@@ -577,6 +566,7 @@ function Main {
     Write-Info ""
     Write-Info "Deployment complete."
     Write-Info "Space repo: $space_repo_id"
+    Write-Info "Hugging Face Space: $space_page_url"
     Write-Info "Dataset repo: $dataset_repo_id"
     Write-Info "OPENCLAW_VERSION: $openclaw_version"
     Write-Info "Space URL: $app_url"

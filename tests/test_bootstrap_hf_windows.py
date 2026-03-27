@@ -31,11 +31,19 @@ class BootstrapHfWindowsScriptTests(unittest.TestCase):
 
     def test_configures_space_variables_and_secrets(self):
         content = self._script_text()
-        self.assertIn('Set-SpaceVariable -SpaceRepoId $space_repo_id -Key "OPENCLAW_BACKUP_DATASET_REPO" -Value $dataset_repo_id -ApiToken $api_token', content)
-        self.assertIn('Set-SpaceVariable -SpaceRepoId $space_repo_id -Key "OPENCLAW_VERSION" -Value $openclaw_version -ApiToken $api_token', content)
-        self.assertIn('Set-SpaceSecret -SpaceRepoId $space_repo_id -Key "HF_TOKEN" -Value $hf_token_for_backup -ApiToken $api_token', content)
-        self.assertIn('Set-SpaceSecret -SpaceRepoId $space_repo_id -Key "OPENCLAW_GATEWAY_TOKEN" -Value $gateway_token -ApiToken $api_token', content)
-        self.assertIn('Set-SpaceSecret -SpaceRepoId $space_repo_id -Key "OPENCLAW_GATEWAY_PASSWORD" -Value $gateway_password -ApiToken $api_token', content)
+        self.assertIn('Set-SpaceVariableLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_BACKUP_DATASET_REPO" -Value $dataset_repo_id -ApiToken $api_token', content)
+        self.assertIn('Set-SpaceVariableLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_VERSION" -Value $openclaw_version -ApiToken $api_token', content)
+        self.assertIn('Set-SpaceVariableLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_GATEWAY_CONTROLUI_ALLOW_INSECURE_AUTH" -Value "false" -ApiToken $api_token', content)
+        self.assertIn('Set-SpaceVariableLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_GATEWAY_CONTROLUI_DANGEROUSLY_DISABLE_DEVICE_AUTH" -Value "false" -ApiToken $api_token', content)
+        self.assertIn('Set-SpaceVariableLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_SSHX_AUTO_START" -Value "false" -ApiToken $api_token', content)
+        self.assertIn('Set-SpaceSecretLogged -SpaceRepoId $space_repo_id -Key "HF_TOKEN" -Value $hf_token_for_backup -ApiToken $api_token', content)
+        self.assertIn('Set-SpaceSecretLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_GATEWAY_TOKEN" -Value $gateway_token -ApiToken $api_token', content)
+        self.assertIn('Set-SpaceSecretLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_GATEWAY_PASSWORD" -Value $gateway_password -ApiToken $api_token', content)
+
+    def test_does_not_prompt_or_restart_space(self):
+        content = self._script_text()
+        self.assertNotIn('Prompt-YesNo -Prompt "Restart Space at the end?"', content)
+        self.assertNotIn('Invoke-Step -Message "Restart Space $space_repo_id"', content)
 
 
 if __name__ == "__main__":

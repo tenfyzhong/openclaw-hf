@@ -142,8 +142,8 @@ class BootstrapHfScriptTests(unittest.TestCase):
 
             # space_name, dataset_name, openclaw_version(blank -> default latest),
             # gateway_token(blank), gateway_password(blank), HF_TOKEN(blank -> reuse current token),
-            # configure_llm(no), sshx_auto_start(yes), restart_space(yes)
-            user_input = "demo-space\ndemo-backup\n\n\n\n\nn\ny\ny\n"
+            # configure_llm(no), sshx_auto_start(yes)
+            user_input = "demo-space\ndemo-backup\n\n\n\n\nn\ny\n"
 
             result = subprocess.run(
                 [str(self._script_path())],
@@ -168,16 +168,17 @@ class BootstrapHfScriptTests(unittest.TestCase):
 
             self.assertIn("space-variable OPENCLAW_BACKUP_DATASET_REPO=demo-user/demo-backup", trace)
             self.assertIn("space-variable OPENCLAW_VERSION=latest", trace)
-            self.assertIn("space-variable OPENCLAW_GATEWAY_CONTROLUI_ALLOW_INSECURE_AUTH=true", trace)
-            self.assertIn("space-variable OPENCLAW_GATEWAY_CONTROLUI_DANGEROUSLY_DISABLE_DEVICE_AUTH=true", trace)
+            self.assertIn("space-variable OPENCLAW_GATEWAY_CONTROLUI_ALLOW_INSECURE_AUTH=false", trace)
+            self.assertIn("space-variable OPENCLAW_GATEWAY_CONTROLUI_DANGEROUSLY_DISABLE_DEVICE_AUTH=false", trace)
             self.assertIn("space-variable OPENCLAW_SSHX_AUTO_START=true", trace)
             self.assertIn("space-secret HF_TOKEN=hf-current-token", trace)
             self.assertIn("space-secret OPENCLAW_GATEWAY_TOKEN=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", trace)
             self.assertIn("space-secret OPENCLAW_GATEWAY_PASSWORD=bbbbbbbbbbbbbbbb", trace)
-            self.assertIn("space-restart demo-user/demo-space", trace)
+            self.assertNotIn("space-restart demo-user/demo-space", trace)
 
             self.assertIn("Generated OPENCLAW_GATEWAY_TOKEN=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", result.stdout)
             self.assertIn("Generated OPENCLAW_GATEWAY_PASSWORD=bbbbbbbbbbbbbbbb", result.stdout)
+            self.assertIn("Hugging Face Space: https://huggingface.co/spaces/demo-user/demo-space", result.stdout)
 
     def test_prompts_for_hf_username_when_whoami_output_is_unparseable(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -205,8 +206,8 @@ class BootstrapHfScriptTests(unittest.TestCase):
 
             # hf_username (fallback prompt), space_name, dataset_name, openclaw_version(blank),
             # gateway token/password/HF token(empty),
-            # configure_llm(no), sshx_auto_start(yes), restart_space(no)
-            user_input = "manual-user\ndemo-space\ndemo-backup\n\n\n\n\nn\ny\nn\n"
+            # configure_llm(no), sshx_auto_start(yes)
+            user_input = "manual-user\ndemo-space\ndemo-backup\n\n\n\n\nn\ny\n"
 
             result = subprocess.run(
                 [str(self._script_path())],
@@ -229,7 +230,7 @@ class BootstrapHfScriptTests(unittest.TestCase):
             self.assertIn("hf repo create manual-user/demo-backup --repo-type dataset --private --exist-ok", trace)
             self.assertIn("HF user: manual-user", result.stdout)
 
-    def test_restart_failure_is_non_fatal(self):
+    def test_does_not_restart_space(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             home_dir = tmp_path / "home"
@@ -253,7 +254,7 @@ class BootstrapHfScriptTests(unittest.TestCase):
                 }
             )
 
-            user_input = "demo-space\ndemo-backup\n\n\n\n\nn\ny\ny\n"
+            user_input = "demo-space\ndemo-backup\n\n\n\n\nn\nn\n"
 
             result = subprocess.run(
                 [str(self._script_path())],
@@ -270,7 +271,10 @@ class BootstrapHfScriptTests(unittest.TestCase):
                 0,
                 msg=f"stdout:\n{result.stdout}\n\nstderr:\n{result.stderr}",
             )
-            self.assertIn(
+            trace = trace_file.read_text(encoding="utf-8")
+            self.assertIn("space-variable OPENCLAW_SSHX_AUTO_START=false", trace)
+            self.assertNotIn("space-restart demo-user/demo-space", trace)
+            self.assertNotIn(
                 "Space restart failed. You can restart manually from Hugging Face Space Settings.",
                 result.stderr,
             )
@@ -301,8 +305,8 @@ class BootstrapHfScriptTests(unittest.TestCase):
 
             # space_name, dataset_name, openclaw_version(blank -> use env default),
             # gateway token/password/HF token(blank), configure_llm(no),
-            # sshx_auto_start(yes), restart_space(no)
-            user_input = "demo-space\ndemo-backup\n\n\n\n\nn\ny\nn\n"
+            # sshx_auto_start(yes)
+            user_input = "demo-space\ndemo-backup\n\n\n\n\nn\ny\n"
 
             result = subprocess.run(
                 [str(self._script_path())],
