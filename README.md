@@ -18,7 +18,7 @@ This setup is designed to provide the following:
 - Store OpenClaw config/workspace under `/root/.openclaw`
 - Restore state automatically from a Hugging Face Dataset on startup
 - Run scheduled backups of OpenClaw data to a Hugging Face Dataset via `cron` (as `root` user)
-- Preinstall `python3`, `uv`, `vim`, `neovim`, `chromium-headless-shell`, `gh`, `hf`, `opencode`, `codex`, `claude` (Claude Code CLI), and `sshx` in the image for interactive terminal use
+- Preinstall `python3`, `uv`, `vim`, `neovim`, `chromium-headless-shell` (via Chrome for Testing archive), `gh`, `hf`, `opencode`, `codex`, `claude` (Claude Code CLI), and `sshx` in the image for interactive terminal use
 
 ## Repository Layout
 
