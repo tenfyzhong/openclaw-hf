@@ -12,7 +12,6 @@ RUN printf 'Acquire::Retries "5";\nAcquire::http::Timeout "30";\nAcquire::https:
     for attempt in 1 2 3 4 5; do \
       if apt-get update && apt-get install -y --no-install-recommends \
           ca-certificates \
-          chromium-headless-shell \
           cmake \
           cron \
           curl \
@@ -23,6 +22,23 @@ RUN printf 'Acquire::Retries "5";\nAcquire::http::Timeout "30";\nAcquire::https:
           gosu \
           hostname \
           jq \
+          libasound2t64 \
+          libatk-bridge2.0-0 \
+          libatk1.0-0 \
+          libatspi2.0-0 \
+          libdbus-1-3 \
+          libgbm1 \
+          libglib2.0-0 \
+          libnspr4 \
+          libnss3 \
+          libx11-6 \
+          libxcb1 \
+          libxcomposite1 \
+          libxdamage1 \
+          libxext6 \
+          libxfixes3 \
+          libxkbcommon0 \
+          libxrandr2 \
           make \
           neovim \
           openssl \
@@ -30,6 +46,7 @@ RUN printf 'Acquire::Retries "5";\nAcquire::http::Timeout "30";\nAcquire::https:
           python3 \
           python3-pip \
           tar \
+          unzip \
           vim; then \
         break; \
       fi; \
@@ -41,6 +58,24 @@ RUN printf 'Acquire::Retries "5";\nAcquire::http::Timeout "30";\nAcquire::https:
       sleep $((attempt * 5)); \
     done; \
     rm -rf /var/lib/apt/lists/*
+
+RUN /bin/bash -lc 'set -euo pipefail; \
+    CFT_VERSION="$(curl -fsSL https://googlechromelabs.github.io/chrome-for-testing/LATEST_RELEASE_STABLE)"; \
+    DEB_ARCH="$(dpkg --print-architecture)"; \
+    case "$DEB_ARCH" in \
+      amd64) CFT_ARCH=linux64 ;; \
+      arm64) CFT_ARCH=linux-arm64 ;; \
+      *) echo "unsupported architecture for chrome-headless-shell: $DEB_ARCH" >&2; exit 1 ;; \
+    esac; \
+    CFT_ZIP="chrome-headless-shell-${CFT_ARCH}.zip"; \
+    CFT_DIR="chrome-headless-shell-${CFT_ARCH}"; \
+    CFT_URL="https://storage.googleapis.com/chrome-for-testing-public/${CFT_VERSION}/${CFT_ARCH}/${CFT_ZIP}"; \
+    curl -fsSL "$CFT_URL" -o "/tmp/${CFT_ZIP}"; \
+    rm -rf "/opt/${CFT_DIR}"; \
+    unzip -q "/tmp/${CFT_ZIP}" -d /opt; \
+    rm -f "/tmp/${CFT_ZIP}"; \
+    ln -sf "/opt/${CFT_DIR}/chrome-headless-shell" /usr/local/bin/chromium-headless-shell; \
+    chromium-headless-shell --version >/dev/null'
 
 RUN /bin/bash -lc 'set -euo pipefail; \
     OPENCLAW_VERSION_VALUE="${OPENCLAW_VERSION:-latest}"; \
