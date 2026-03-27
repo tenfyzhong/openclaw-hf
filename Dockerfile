@@ -12,16 +12,19 @@ RUN printf 'Acquire::Retries "5";\nAcquire::http::Timeout "30";\nAcquire::https:
     for attempt in 1 2 3 4 5; do \
       if apt-get update && apt-get install -y --no-install-recommends \
           ca-certificates \
+          chromium-headless-shell \
           cmake \
           cron \
           curl \
           g++ \
+          gh \
           git \
           gnupg \
           gosu \
           hostname \
           jq \
           make \
+          neovim \
           openssl \
           procps \
           python3 \
@@ -82,7 +85,14 @@ RUN /bin/bash -lc 'set -euo pipefail; \
       "/usr/local/bin/$cmd" --help >/dev/null; \
     done'
 
-RUN python3 -m pip install --no-cache-dir --break-system-packages "huggingface_hub[cli]>=0.31.1"
+RUN python3 -m pip install --no-cache-dir --break-system-packages "huggingface_hub[cli]>=0.31.1" "uv>=0.6.0" && \
+    hf --help >/dev/null && \
+    uv --version >/dev/null
+
+RUN python3 --version >/dev/null && \
+    gh --version >/dev/null && \
+    nvim --version >/dev/null && \
+    command -v chromium-headless-shell >/dev/null
 
 RUN HOME=/root /bin/bash -lc "curl -sSf https://sshx.io/get | sh" && \
     if [ -x /root/.local/bin/sshx ]; then ln -sf /root/.local/bin/sshx /usr/local/bin/sshx; fi && \
@@ -119,6 +129,12 @@ ENV OPENCLAW_LLM_API=openai-completions
 ENV OPENCLAW_BACKUP_ENABLED=true
 ENV OPENCLAW_BACKUP_CRON="*/30 * * * *"
 ENV OPENCLAW_BACKUP_SOURCE_DIR=/root/.openclaw
+ENV OPENCLAW_BACKUP_ROOT_CONFIG_DIR=/root/.config
+ENV OPENCLAW_BACKUP_ROOT_CODEX_DIR=/root/.codex
+ENV OPENCLAW_BACKUP_ROOT_CLAUDE_DIR=/root/.claude
+ENV OPENCLAW_BACKUP_ROOT_AGENTS_DIR=/root/.agents
+ENV OPENCLAW_BACKUP_ROOT_SSH_DIR=/root/.ssh
+ENV OPENCLAW_BACKUP_ROOT_NPM_DIR=/root/.npm
 ENV OPENCLAW_SSHX_AUTO_START=false
 ENV OPENCLAW_BACKUP_PRIVATE=true
 ENV OPENCLAW_BACKUP_PATH_PREFIX=backups

@@ -25,6 +25,12 @@ class RuntimeUserDefaultsTests(unittest.TestCase):
         self.assertIn("ENV OPENCLAW_USER=root", dockerfile)
         self.assertIn("ENV OPENCLAW_GROUP=root", dockerfile)
         self.assertIn("ENV OPENCLAW_BACKUP_SOURCE_DIR=/root/.openclaw", dockerfile)
+        self.assertIn("ENV OPENCLAW_BACKUP_ROOT_CONFIG_DIR=/root/.config", dockerfile)
+        self.assertIn("ENV OPENCLAW_BACKUP_ROOT_CODEX_DIR=/root/.codex", dockerfile)
+        self.assertIn("ENV OPENCLAW_BACKUP_ROOT_CLAUDE_DIR=/root/.claude", dockerfile)
+        self.assertIn("ENV OPENCLAW_BACKUP_ROOT_AGENTS_DIR=/root/.agents", dockerfile)
+        self.assertIn("ENV OPENCLAW_BACKUP_ROOT_SSH_DIR=/root/.ssh", dockerfile)
+        self.assertIn("ENV OPENCLAW_BACKUP_ROOT_NPM_DIR=/root/.npm", dockerfile)
         self.assertIn('OPENCLAW_BIN="$(command -v openclaw || true)"', dockerfile)
         self.assertIn('if [[ -z "$OPENCLAW_BIN" ]] && [[ -x /root/.npm-global/bin/openclaw ]]; then', dockerfile)
         self.assertIn('elif [[ -z "$OPENCLAW_BIN" ]] && [[ -x /root/.local/bin/openclaw ]]; then', dockerfile)
@@ -40,7 +46,11 @@ class RuntimeUserDefaultsTests(unittest.TestCase):
 
     def test_dockerfile_preinstalls_common_cli_tools(self):
         dockerfile = self._dockerfile_path().read_text(encoding="utf-8")
+        self.assertIn("python3", dockerfile)
         self.assertIn("vim; then", dockerfile)
+        self.assertIn("neovim", dockerfile)
+        self.assertIn("chromium-headless-shell", dockerfile)
+        self.assertIn("gh", dockerfile)
         self.assertIn(
             "npm install -g --no-audit --no-fund opencode-ai @openai/codex @anthropic-ai/claude-code",
             dockerfile,
@@ -48,6 +58,8 @@ class RuntimeUserDefaultsTests(unittest.TestCase):
         self.assertIn("for cmd in opencode codex claude; do", dockerfile)
         self.assertIn('ln -sf "$CLI_BIN" "/usr/local/bin/$cmd"', dockerfile)
         self.assertIn('"/usr/local/bin/$cmd" --help >/dev/null', dockerfile)
+        self.assertIn('hf --help >/dev/null', dockerfile)
+        self.assertIn("uv --version >/dev/null", dockerfile)
 
     def test_entrypoint_defaults_to_root_runtime_user(self):
         entrypoint = self._entrypoint_path().read_text(encoding="utf-8")
@@ -55,6 +67,12 @@ class RuntimeUserDefaultsTests(unittest.TestCase):
         self.assertIn('OPENCLAW_GROUP="${OPENCLAW_GROUP:-root}"', entrypoint)
         self.assertIn('OPENCLAW_HOME="${OPENCLAW_HOME:-/root}"', entrypoint)
         self.assertIn('OPENCLAW_BACKUP_SOURCE_DIR="${OPENCLAW_BACKUP_SOURCE_DIR:-${OPENCLAW_STATE_DIR}}"', entrypoint)
+        self.assertIn('OPENCLAW_BACKUP_ROOT_CONFIG_DIR="${OPENCLAW_BACKUP_ROOT_CONFIG_DIR:-/root/.config}"', entrypoint)
+        self.assertIn('OPENCLAW_BACKUP_ROOT_CODEX_DIR="${OPENCLAW_BACKUP_ROOT_CODEX_DIR:-/root/.codex}"', entrypoint)
+        self.assertIn('OPENCLAW_BACKUP_ROOT_CLAUDE_DIR="${OPENCLAW_BACKUP_ROOT_CLAUDE_DIR:-/root/.claude}"', entrypoint)
+        self.assertIn('OPENCLAW_BACKUP_ROOT_AGENTS_DIR="${OPENCLAW_BACKUP_ROOT_AGENTS_DIR:-/root/.agents}"', entrypoint)
+        self.assertIn('OPENCLAW_BACKUP_ROOT_SSH_DIR="${OPENCLAW_BACKUP_ROOT_SSH_DIR:-/root/.ssh}"', entrypoint)
+        self.assertIn('OPENCLAW_BACKUP_ROOT_NPM_DIR="${OPENCLAW_BACKUP_ROOT_NPM_DIR:-/root/.npm}"', entrypoint)
 
     def test_backup_cron_uses_openclaw_user(self):
         entrypoint = self._entrypoint_path().read_text(encoding="utf-8")
@@ -83,6 +101,12 @@ class RuntimeUserDefaultsTests(unittest.TestCase):
     def test_backup_env_file_includes_keep_count(self):
         entrypoint = self._entrypoint_path().read_text(encoding="utf-8")
         self.assertIn("OPENCLAW_BACKUP_KEEP_COUNT", entrypoint)
+        self.assertIn("OPENCLAW_BACKUP_ROOT_CONFIG_DIR", entrypoint)
+        self.assertIn("OPENCLAW_BACKUP_ROOT_CODEX_DIR", entrypoint)
+        self.assertIn("OPENCLAW_BACKUP_ROOT_CLAUDE_DIR", entrypoint)
+        self.assertIn("OPENCLAW_BACKUP_ROOT_AGENTS_DIR", entrypoint)
+        self.assertIn("OPENCLAW_BACKUP_ROOT_SSH_DIR", entrypoint)
+        self.assertIn("OPENCLAW_BACKUP_ROOT_NPM_DIR", entrypoint)
 
     def test_sshx_auto_start_does_not_use_command_substitution(self):
         entrypoint = self._entrypoint_path().read_text(encoding="utf-8")

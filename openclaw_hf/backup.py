@@ -48,6 +48,12 @@ class BackupConfig:
     path_prefix: str
     latest_name: str
     private: bool
+    root_config_dir: Path = Path("/root/.config").resolve()
+    root_codex_dir: Path = Path("/root/.codex").resolve()
+    root_claude_dir: Path = Path("/root/.claude").resolve()
+    root_agents_dir: Path = Path("/root/.agents").resolve()
+    root_ssh_dir: Path = Path("/root/.ssh").resolve()
+    root_npm_dir: Path = Path("/root/.npm").resolve()
     keep_count: int = 48
 
     @classmethod
@@ -62,6 +68,20 @@ class BackupConfig:
             backup_source_dir = Path(backup_source_raw).resolve()
         else:
             backup_source_dir = state_dir
+        root_config_dir = Path(
+            (os.getenv("OPENCLAW_BACKUP_ROOT_CONFIG_DIR") or "/root/.config").strip() or "/root/.config"
+        ).resolve()
+        root_codex_dir = Path(
+            (os.getenv("OPENCLAW_BACKUP_ROOT_CODEX_DIR") or "/root/.codex").strip() or "/root/.codex"
+        ).resolve()
+        root_claude_dir = Path(
+            (os.getenv("OPENCLAW_BACKUP_ROOT_CLAUDE_DIR") or "/root/.claude").strip() or "/root/.claude"
+        ).resolve()
+        root_agents_dir = Path(
+            (os.getenv("OPENCLAW_BACKUP_ROOT_AGENTS_DIR") or "/root/.agents").strip() or "/root/.agents"
+        ).resolve()
+        root_ssh_dir = Path((os.getenv("OPENCLAW_BACKUP_ROOT_SSH_DIR") or "/root/.ssh").strip() or "/root/.ssh").resolve()
+        root_npm_dir = Path((os.getenv("OPENCLAW_BACKUP_ROOT_NPM_DIR") or "/root/.npm").strip() or "/root/.npm").resolve()
         work_dir = Path(os.getenv("OPENCLAW_BACKUP_WORK_DIR", "/tmp/openclaw-backup")).resolve()
         repo_type = (os.getenv("OPENCLAW_BACKUP_REPO_TYPE") or "dataset").strip() or "dataset"
         path_prefix = (os.getenv("OPENCLAW_BACKUP_PATH_PREFIX") or "backups").strip("/")
@@ -94,6 +114,12 @@ class BackupConfig:
             path_prefix=path_prefix,
             latest_name=latest_name,
             private=private,
+            root_config_dir=root_config_dir,
+            root_codex_dir=root_codex_dir,
+            root_claude_dir=root_claude_dir,
+            root_agents_dir=root_agents_dir,
+            root_ssh_dir=root_ssh_dir,
+            root_npm_dir=root_npm_dir,
             keep_count=keep_count,
         )
 
@@ -121,6 +147,16 @@ class OpenClawBackup:
             exist_ok=True,
         )
 
+    def _extra_root_dirs(self) -> dict[str, Path]:
+        return {
+            "root-config": self.config.root_config_dir,
+            "root-codex": self.config.root_codex_dir,
+            "root-claude": self.config.root_claude_dir,
+            "root-agents": self.config.root_agents_dir,
+            "root-ssh": self.config.root_ssh_dir,
+            "root-npm": self.config.root_npm_dir,
+        }
+
     def create_archive(self, timestamp: Optional[str] = None) -> Path:
         if not self.config.backup_source_dir.exists():
             raise FileNotFoundError(f"backup source directory does not exist: {self.config.backup_source_dir}")
@@ -131,6 +167,9 @@ class OpenClawBackup:
         archive = self.config.work_dir / f"openclaw-backup-{stamp}.tar.gz"
         with tarfile.open(archive, "w:gz") as tar:
             tar.add(str(self.config.backup_source_dir), arcname="openclaw-state")
+            for archive_root, local_dir in self._extra_root_dirs().items():
+                if local_dir.exists():
+                    tar.add(str(local_dir), arcname=archive_root)
 
         return archive
 
@@ -162,6 +201,7 @@ class OpenClawBackup:
             "latest": self.config.latest_name,
             "created_at_utc": utc_now().isoformat(timespec="seconds"),
             "state_root": "openclaw-state",
+            "extra_roots": sorted(self._extra_root_dirs().keys()),
         }
         self.api.upload_file(
             repo_id=self.config.dataset_repo,
@@ -293,6 +333,13 @@ class OpenClawBackup:
                 raise RuntimeError("backup archive missing openclaw-state directory")
 
             self.replace_dir_contents(extracted_state, self.config.backup_source_dir)
+
+            for archive_root, local_dir in self._extra_root_dirs().items():
+                extracted_extra_dir = tmp_dir / archive_root
+                if extracted_extra_dir.exists():
+                    if not extracted_extra_dir.is_dir():
+                        raise RuntimeError(f"backup archive {archive_root} is not a directory")
+                    self.replace_dir_contents(extracted_extra_dir, local_dir)
 
         print(f"restore completed from {self.config.dataset_repo}/{self.config.latest_name}")
         return True
