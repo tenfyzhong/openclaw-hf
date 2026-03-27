@@ -35,7 +35,7 @@ class BootstrapHfWindowsScriptTests(unittest.TestCase):
         self.assertIn('Set-SpaceVariableLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_VERSION" -Value $openclaw_version -ApiToken $api_token', content)
         self.assertIn('Set-SpaceVariableLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_GATEWAY_CONTROLUI_ALLOW_INSECURE_AUTH" -Value "false" -ApiToken $api_token', content)
         self.assertIn('Set-SpaceVariableLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_GATEWAY_CONTROLUI_DANGEROUSLY_DISABLE_DEVICE_AUTH" -Value "false" -ApiToken $api_token', content)
-        self.assertIn('Set-SpaceVariableLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_SSHX_AUTO_START" -Value "false" -ApiToken $api_token', content)
+        self.assertIn('Set-SpaceVariableLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_SSHX_AUTO_START" -Value $sshx_auto_start_value -ApiToken $api_token', content)
         self.assertIn('Set-SpaceSecretLogged -SpaceRepoId $space_repo_id -Key "HF_TOKEN" -Value $hf_token_for_backup -ApiToken $api_token', content)
         self.assertIn('Set-SpaceSecretLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_GATEWAY_TOKEN" -Value $gateway_token -ApiToken $api_token', content)
         self.assertIn('Set-SpaceSecretLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_GATEWAY_PASSWORD" -Value $gateway_password -ApiToken $api_token', content)
@@ -44,6 +44,11 @@ class BootstrapHfWindowsScriptTests(unittest.TestCase):
         content = self._script_text()
         self.assertNotIn('Prompt-YesNo -Prompt "Restart Space at the end?"', content)
         self.assertNotIn('Invoke-Step -Message "Restart Space $space_repo_id"', content)
+
+    def test_requires_confirmation_before_remote_execution(self):
+        content = self._script_text()
+        self.assertIn('Prompt-YesNo -Prompt "Proceed with these settings?" -DefaultValue "y"', content)
+        self.assertIn('Write-Info "Cancelled by user before creating/updating Space or Dataset."', content)
 
 
 if __name__ == "__main__":

@@ -106,6 +106,7 @@ powershell -ExecutionPolicy ByPass -File .\scripts\bootstrap-hf.ps1
   - `OPENCLAW_GATEWAY_CONTROLUI_ALLOW_INSECURE_AUTH=false`
   - `OPENCLAW_GATEWAY_CONTROLUI_DANGEROUSLY_DISABLE_DEVICE_AUTH=false`
 - Optionally configure LLM triplet and set `OPENCLAW_SSHX_AUTO_START` from prompt choice (`true`/`false`)
+- Print planned deployment settings and require a final confirmation before creating/updating Space/Dataset resources
 - Print Hugging Face Space page URL, app URL, and `/healthz`
 
 If gateway token/password were auto-generated, the script prints them at the end.
@@ -178,6 +179,8 @@ Agent should ask in one consolidated message, in this order:
 7. `Configure custom LLM now?` (`y/N`):
    - if `yes`, collect all 3: `OPENCLAW_LLM_BASE_URL`, `OPENCLAW_LLM_MODEL`, `OPENCLAW_LLM_API_KEY`.
    - if `no`, ask whether to set `OPENCLAW_SSHX_AUTO_START=true` (`Y/n`) for later sshx-based setup. When answer is `no`, script sets `OPENCLAW_SSHX_AUTO_START=false`.
+8. `Proceed with these settings?` (`Y/n`):
+   - if `no`, script exits before creating Space/Dataset or applying any Space variable/secret changes.
 
 If `hf auth whoami` is not logged in, explain that the script will run `hf auth login` before deployment.
 
@@ -196,6 +199,7 @@ powershell -ExecutionPolicy ByPass -File .\scripts\bootstrap-hf.ps1
 ```
 
 Agent should follow the script prompts step by step using the user-provided values in the same order.
+If the final confirmation prompt is `no`, stop and do not execute repository creation/upload/variable updates.
 
 The script will complete all deployment actions:
 

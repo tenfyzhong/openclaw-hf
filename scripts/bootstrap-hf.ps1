@@ -493,6 +493,7 @@ function Main {
   $llm_model = ""
   $llm_api_key = ""
   $enable_sshx = "no"
+  $sshx_auto_start_value = "false"
   Invoke-Step -Message "Collect custom LLM or sshx bootstrap options" -Action {
     $configure_llm = Prompt-YesNo -Prompt "Configure custom LLM now?" -DefaultValue "n"
     if ($configure_llm -eq "yes") {
@@ -505,6 +506,28 @@ function Main {
     } else {
       $enable_sshx = Prompt-YesNo -Prompt "Set OPENCLAW_SSHX_AUTO_START=true for later sshx setup?" -DefaultValue "y"
     }
+  }
+  if ($enable_sshx -eq "yes") {
+    $sshx_auto_start_value = "true"
+  }
+
+  Write-Info ""
+  Write-Info "Planned deployment configuration:"
+  Write-Info "Space repo: $space_repo_id"
+  Write-Info "Dataset repo: $dataset_repo_id"
+  Write-Info "OPENCLAW_VERSION: $openclaw_version"
+  Write-Info "OPENCLAW_GATEWAY_CONTROLUI_ALLOW_INSECURE_AUTH=false"
+  Write-Info "OPENCLAW_GATEWAY_CONTROLUI_DANGEROUSLY_DISABLE_DEVICE_AUTH=false"
+  Write-Info "OPENCLAW_SSHX_AUTO_START=$sshx_auto_start_value"
+  if ($configure_llm -eq "yes") {
+    Write-Info "Custom LLM config: enabled"
+  } else {
+    Write-Info "Custom LLM config: disabled"
+  }
+  $proceed_with_deploy = Prompt-YesNo -Prompt "Proceed with these settings?" -DefaultValue "y"
+  if ($proceed_with_deploy -ne "yes") {
+    Write-Info "Cancelled by user before creating/updating Space or Dataset."
+    return
   }
 
   Invoke-Step -Message "Create Space repo $space_repo_id" -Action {
@@ -551,11 +574,7 @@ function Main {
     Set-SpaceSecretLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_LLM_API_KEY" -Value $llm_api_key -ApiToken $api_token
   }
 
-  if ($enable_sshx -eq "yes") {
-    Set-SpaceVariableLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_SSHX_AUTO_START" -Value "true" -ApiToken $api_token
-  } else {
-    Set-SpaceVariableLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_SSHX_AUTO_START" -Value "false" -ApiToken $api_token
-  }
+  Set-SpaceVariableLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_SSHX_AUTO_START" -Value $sshx_auto_start_value -ApiToken $api_token
 
   Invoke-Step -Message "Print deployment summary" -Action {
     $space_page_url = "https://huggingface.co/spaces/$space_repo_id"

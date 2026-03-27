@@ -304,6 +304,8 @@ main() {
   local llm_model=""
   local llm_api_key=""
   local enable_sshx="no"
+  local sshx_auto_start_value="false"
+  local proceed_with_deploy
   local api_token
   local space_page_url
   local space_host
@@ -370,6 +372,28 @@ main() {
   else
     enable_sshx="$(prompt_yes_no "Set OPENCLAW_SSHX_AUTO_START=true for later sshx setup?" "y")"
   fi
+  if [[ "$enable_sshx" == "yes" ]]; then
+    sshx_auto_start_value="true"
+  fi
+
+  info ""
+  info "Planned deployment configuration:"
+  info "Space repo: $space_repo_id"
+  info "Dataset repo: $dataset_repo_id"
+  info "OPENCLAW_VERSION: $openclaw_version"
+  info "OPENCLAW_GATEWAY_CONTROLUI_ALLOW_INSECURE_AUTH=false"
+  info "OPENCLAW_GATEWAY_CONTROLUI_DANGEROUSLY_DISABLE_DEVICE_AUTH=false"
+  info "OPENCLAW_SSHX_AUTO_START=$sshx_auto_start_value"
+  if [[ "$configure_llm" == "yes" ]]; then
+    info "Custom LLM config: enabled"
+  else
+    info "Custom LLM config: disabled"
+  fi
+  proceed_with_deploy="$(prompt_yes_no "Proceed with these settings?" "y")"
+  if [[ "$proceed_with_deploy" != "yes" ]]; then
+    info "Cancelled by user before creating/updating Space or Dataset."
+    return 0
+  fi
 
   info "Creating private Space and Dataset..."
   hf repo create "$space_repo_id" --repo-type space --space-sdk docker --private --exist-ok
@@ -399,11 +423,7 @@ main() {
     set_space_secret "$space_repo_id" "OPENCLAW_LLM_API_KEY" "$llm_api_key" "$api_token"
   fi
 
-  if [[ "$enable_sshx" == "yes" ]]; then
-    set_space_variable "$space_repo_id" "OPENCLAW_SSHX_AUTO_START" "true" "$api_token"
-  else
-    set_space_variable "$space_repo_id" "OPENCLAW_SSHX_AUTO_START" "false" "$api_token"
-  fi
+  set_space_variable "$space_repo_id" "OPENCLAW_SSHX_AUTO_START" "$sshx_auto_start_value" "$api_token"
 
   space_page_url="https://huggingface.co/spaces/${space_repo_id}"
   space_host="${space_repo_id/\//-}.hf.space"

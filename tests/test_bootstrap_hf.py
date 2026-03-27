@@ -142,8 +142,8 @@ class BootstrapHfScriptTests(unittest.TestCase):
 
             # space_name, dataset_name, openclaw_version(blank -> default latest),
             # gateway_token(blank), gateway_password(blank), HF_TOKEN(blank -> reuse current token),
-            # configure_llm(no), sshx_auto_start(yes)
-            user_input = "demo-space\ndemo-backup\n\n\n\n\nn\ny\n"
+            # configure_llm(no), sshx_auto_start(yes), proceed(yes)
+            user_input = "demo-space\ndemo-backup\n\n\n\n\nn\ny\ny\n"
 
             result = subprocess.run(
                 [str(self._script_path())],
@@ -206,8 +206,8 @@ class BootstrapHfScriptTests(unittest.TestCase):
 
             # hf_username (fallback prompt), space_name, dataset_name, openclaw_version(blank),
             # gateway token/password/HF token(empty),
-            # configure_llm(no), sshx_auto_start(yes)
-            user_input = "manual-user\ndemo-space\ndemo-backup\n\n\n\n\nn\ny\n"
+            # configure_llm(no), sshx_auto_start(yes), proceed(yes)
+            user_input = "manual-user\ndemo-space\ndemo-backup\n\n\n\n\nn\ny\ny\n"
 
             result = subprocess.run(
                 [str(self._script_path())],
@@ -254,7 +254,8 @@ class BootstrapHfScriptTests(unittest.TestCase):
                 }
             )
 
-            user_input = "demo-space\ndemo-backup\n\n\n\n\nn\nn\n"
+            # configure_llm(no), sshx_auto_start(no), proceed(yes)
+            user_input = "demo-space\ndemo-backup\n\n\n\n\nn\nn\ny\n"
 
             result = subprocess.run(
                 [str(self._script_path())],
@@ -305,8 +306,8 @@ class BootstrapHfScriptTests(unittest.TestCase):
 
             # space_name, dataset_name, openclaw_version(blank -> use env default),
             # gateway token/password/HF token(blank), configure_llm(no),
-            # sshx_auto_start(yes)
-            user_input = "demo-space\ndemo-backup\n\n\n\n\nn\ny\n"
+            # sshx_auto_start(yes), proceed(yes)
+            user_input = "demo-space\ndemo-backup\n\n\n\n\nn\ny\ny\n"
 
             result = subprocess.run(
                 [str(self._script_path())],
@@ -327,6 +328,55 @@ class BootstrapHfScriptTests(unittest.TestCase):
             trace = trace_file.read_text(encoding="utf-8")
             self.assertIn("space-variable OPENCLAW_VERSION=2026.3.23-2", trace)
             self.assertIn("OPENCLAW_VERSION: 2026.3.23-2", result.stdout)
+
+    def test_user_can_cancel_before_remote_execution(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            home_dir = tmp_path / "home"
+            token_file = home_dir / ".cache" / "huggingface" / "token"
+            bin_dir = tmp_path / "bin"
+            trace_file = tmp_path / "trace.log"
+
+            bin_dir.mkdir(parents=True)
+            token_file.parent.mkdir(parents=True)
+            token_file.write_text("hf-current-token\n", encoding="utf-8")
+            trace_file.write_text("", encoding="utf-8")
+            self._prepare_fake_tools(bin_dir)
+
+            env = os.environ.copy()
+            env.update(
+                {
+                    "HOME": str(home_dir),
+                    "TRACE_FILE": str(trace_file),
+                    "PATH": f"{bin_dir}:{env.get('PATH', '')}",
+                }
+            )
+
+            # configure_llm(no), sshx_auto_start(yes), proceed(no)
+            user_input = "demo-space\ndemo-backup\n\n\n\n\nn\ny\nn\n"
+
+            result = subprocess.run(
+                [str(self._script_path())],
+                cwd=self._repo_root(),
+                env=env,
+                input=user_input,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(
+                result.returncode,
+                0,
+                msg=f"stdout:\n{result.stdout}\n\nstderr:\n{result.stderr}",
+            )
+
+            trace = trace_file.read_text(encoding="utf-8")
+            self.assertNotIn("hf repo create", trace)
+            self.assertNotIn("hf upload", trace)
+            self.assertNotIn("space-variable ", trace)
+            self.assertNotIn("space-secret ", trace)
+            self.assertIn("Cancelled by user before creating/updating Space or Dataset.", result.stdout)
 
 
 if __name__ == "__main__":
