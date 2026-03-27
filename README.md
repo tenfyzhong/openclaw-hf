@@ -18,7 +18,7 @@ This setup is designed to provide the following:
 - Store OpenClaw config/workspace under `/root/.openclaw`
 - Restore state automatically from a Hugging Face Dataset on startup
 - Run scheduled backups of OpenClaw data to a Hugging Face Dataset via `cron` (as `root` user)
-- Preinstall `sshx` in the image so you can open a shareable terminal session from inside the container
+- Preinstall `vim`, `opencode`, `codex`, `claude` (Claude Code CLI), and `sshx` in the image for interactive terminal use
 
 ## Repository Layout
 
@@ -103,10 +103,11 @@ powershell -ExecutionPolicy ByPass -File .\scripts\bootstrap-hf.ps1
   - `HF_TOKEN`
   - `OPENCLAW_GATEWAY_TOKEN`
   - `OPENCLAW_GATEWAY_PASSWORD`
-  - `OPENCLAW_GATEWAY_CONTROLUI_ALLOW_INSECURE_AUTH=true`
-  - `OPENCLAW_GATEWAY_CONTROLUI_DANGEROUSLY_DISABLE_DEVICE_AUTH=true`
-- Optionally configure LLM triplet and `OPENCLAW_SSHX_AUTO_START=true`
-- Optionally restart Space, then print Space URL and `/healthz`
+  - `OPENCLAW_GATEWAY_CONTROLUI_ALLOW_INSECURE_AUTH=false`
+  - `OPENCLAW_GATEWAY_CONTROLUI_DANGEROUSLY_DISABLE_DEVICE_AUTH=false`
+- Optionally configure LLM triplet and set `OPENCLAW_SSHX_AUTO_START` from prompt choice (`true`/`false`)
+- Print planned deployment settings and require a final confirmation before creating/updating Space/Dataset resources
+- Print Hugging Face Space page URL, app URL, and `/healthz`
 
 If gateway token/password were auto-generated, the script prints them at the end.
 
@@ -177,8 +178,9 @@ Agent should ask in one consolidated message, in this order:
 6. `HF_TOKEN for backup dataset` (optional secret): if empty, script reuses current local HF login token; token must have write access to the backup Dataset.
 7. `Configure custom LLM now?` (`y/N`):
    - if `yes`, collect all 3: `OPENCLAW_LLM_BASE_URL`, `OPENCLAW_LLM_MODEL`, `OPENCLAW_LLM_API_KEY`.
-   - if `no`, ask whether to set `OPENCLAW_SSHX_AUTO_START=true` (`Y/n`) for later sshx-based setup.
-8. `Restart Space at the end?` (`Y/n`).
+   - if `no`, ask whether to set `OPENCLAW_SSHX_AUTO_START=true` (`Y/n`) for later sshx-based setup. When answer is `no`, script sets `OPENCLAW_SSHX_AUTO_START=false`.
+8. `Proceed with these settings?` (`Y/n`):
+   - if `no`, script exits before creating Space/Dataset or applying any Space variable/secret changes.
 
 If `hf auth whoami` is not logged in, explain that the script will run `hf auth login` before deployment.
 
@@ -197,6 +199,7 @@ powershell -ExecutionPolicy ByPass -File .\scripts\bootstrap-hf.ps1
 ```
 
 Agent should follow the script prompts step by step using the user-provided values in the same order.
+If the final confirmation prompt is `no`, stop and do not execute repository creation/upload/variable updates.
 
 The script will complete all deployment actions:
 
@@ -204,15 +207,16 @@ The script will complete all deployment actions:
 - upload repository to the Space
 - configure Space variables and secrets (including `OPENCLAW_BACKUP_DATASET_REPO`, `OPENCLAW_VERSION`, `HF_TOKEN`, gateway credentials, and optional LLM/SSHX settings)
 - set:
-  - `OPENCLAW_GATEWAY_CONTROLUI_ALLOW_INSECURE_AUTH=true`
-  - `OPENCLAW_GATEWAY_CONTROLUI_DANGEROUSLY_DISABLE_DEVICE_AUTH=true`
-- optionally restart the Space
+  - `OPENCLAW_GATEWAY_CONTROLUI_ALLOW_INSECURE_AUTH=false`
+  - `OPENCLAW_GATEWAY_CONTROLUI_DANGEROUSLY_DISABLE_DEVICE_AUTH=false`
+- set `OPENCLAW_SSHX_AUTO_START=true` only when chosen; otherwise set `OPENCLAW_SSHX_AUTO_START=false`
 
 ### 4. Final hand-off to user (required)
 
 Agent final message must include:
 
 - Space repo ID: `<owner>/<space_name>`
+- Space page URL: `https://huggingface.co/spaces/<owner>/<space_name>`
 - Dataset repo ID: `<owner>/<dataset_name>`
 - `OPENCLAW_VERSION` used
 - App URL: `https://<owner>-<space_name>.hf.space`

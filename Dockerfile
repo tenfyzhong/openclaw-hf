@@ -26,7 +26,8 @@ RUN printf 'Acquire::Retries "5";\nAcquire::http::Timeout "30";\nAcquire::https:
           procps \
           python3 \
           python3-pip \
-          tar; then \
+          tar \
+          vim; then \
         break; \
       fi; \
       if [ "$attempt" -eq 5 ]; then \
@@ -55,6 +56,31 @@ RUN /bin/bash -lc 'set -euo pipefail; \
     fi; \
     ln -sf "$OPENCLAW_BIN" /usr/local/bin/openclaw; \
     /usr/local/bin/openclaw --help >/dev/null'
+
+RUN /bin/bash -lc 'set -euo pipefail; \
+    if ! command -v npm >/dev/null; then \
+      echo "npm command not found; cannot install developer CLIs" >&2; \
+      exit 1; \
+    fi; \
+    npm install -g --no-audit --no-fund opencode-ai @openai/codex @anthropic-ai/claude-code; \
+    NPM_PREFIX="$(npm config get prefix)"; \
+    NPM_BIN="${NPM_PREFIX%/}/bin"; \
+    for cmd in opencode codex claude; do \
+      CLI_BIN="$(command -v "$cmd" || true)"; \
+      if [[ -z "$CLI_BIN" ]] && [[ -x "$NPM_BIN/$cmd" ]]; then \
+        CLI_BIN="$NPM_BIN/$cmd"; \
+      elif [[ -z "$CLI_BIN" ]] && [[ -x /root/.npm-global/bin/"$cmd" ]]; then \
+        CLI_BIN=/root/.npm-global/bin/"$cmd"; \
+      elif [[ -z "$CLI_BIN" ]] && [[ -x /root/.local/bin/"$cmd" ]]; then \
+        CLI_BIN=/root/.local/bin/"$cmd"; \
+      fi; \
+      if [[ -z "$CLI_BIN" ]]; then \
+        echo "$cmd command not found after npm install" >&2; \
+        exit 1; \
+      fi; \
+      ln -sf "$CLI_BIN" "/usr/local/bin/$cmd"; \
+      "/usr/local/bin/$cmd" --help >/dev/null; \
+    done'
 
 RUN python3 -m pip install --no-cache-dir --break-system-packages "huggingface_hub[cli]>=0.31.1"
 
