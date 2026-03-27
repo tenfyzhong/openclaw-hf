@@ -51,9 +51,9 @@ class RuntimeUserDefaultsTests(unittest.TestCase):
         self.assertIn("neovim", dockerfile)
         self.assertNotIn("apt-get install -y --no-install-recommends \\\n          ca-certificates \\\n          chromium-headless-shell", dockerfile)
         self.assertIn("googlechromelabs.github.io/chrome-for-testing/LATEST_RELEASE_STABLE", dockerfile)
-        self.assertIn("chrome-headless-shell-${CFT_ARCH}.zip", dockerfile)
-        self.assertIn('CFT_DIR="chrome-headless-shell-${CFT_ARCH}"', dockerfile)
-        self.assertIn('ln -sf "/opt/${CFT_DIR}/chrome-headless-shell" /usr/local/bin/chromium-headless-shell', dockerfile)
+        self.assertIn("chrome-${CFT_ARCH}.zip", dockerfile)
+        self.assertIn('CFT_DIR="chrome-${CFT_ARCH}"', dockerfile)
+        self.assertIn('ln -sf "/opt/${CFT_DIR}/chrome" /usr/local/bin/chromium', dockerfile)
         self.assertIn("gh", dockerfile)
         self.assertIn(
             "npm install -g --no-audit --no-fund opencode-ai @openai/codex @anthropic-ai/claude-code",
