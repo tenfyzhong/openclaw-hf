@@ -68,6 +68,9 @@ In that case, you can still configure from inside the container (for example via
 - `OPENCLAW_BACKUP_CRON` (default: `*/30 * * * *`, backup every 30 minutes)
 - `OPENCLAW_BACKUP_SOURCE_DIR` (default: `/root/.openclaw`, backup/restore base directory for `openclaw-state`)
 - `OPENCLAW_BACKUP_ROOT_CONFIG_DIR` (default: `/root/.config`, additional backup/restore directory for `root-config`)
+- `OPENCLAW_BACKUP_ROOT_CODEX_DIR` (default: `/root/.codex`, additional backup/restore directory for `root-codex`)
+- `OPENCLAW_BACKUP_ROOT_CLAUDE_DIR` (default: `/root/.claude`, additional backup/restore directory for `root-claude`)
+- `OPENCLAW_BACKUP_ROOT_AGENTS_DIR` (default: `/root/.agents`, additional backup/restore directory for `root-agents`)
 - `OPENCLAW_BACKUP_PATH_PREFIX` (default: `backups`)
 - `OPENCLAW_BACKUP_LATEST_NAME` (default: `latest-backup.tar.gz`)
 - `OPENCLAW_BACKUP_KEEP_COUNT` (default: `48`, keep newest N timestamped backup archives; older ones are auto-deleted)
@@ -299,12 +302,18 @@ For this project, if you need stable dashboard access without cold starts, use p
 - Startup restore: on container startup, it tries to fetch `latest-backup.tar.gz` from the Dataset and restore:
   - `openclaw-state` -> `OPENCLAW_BACKUP_SOURCE_DIR` (default `/root/.openclaw`)
   - `root-config` -> `OPENCLAW_BACKUP_ROOT_CONFIG_DIR` (default `/root/.config`, restored only when present in archive)
+  - `root-codex` -> `OPENCLAW_BACKUP_ROOT_CODEX_DIR` (default `/root/.codex`, restored only when present in archive)
+  - `root-claude` -> `OPENCLAW_BACKUP_ROOT_CLAUDE_DIR` (default `/root/.claude`, restored only when present in archive)
+  - `root-agents` -> `OPENCLAW_BACKUP_ROOT_AGENTS_DIR` (default `/root/.agents`, restored only when present in archive)
 - Scheduled backup: cron runs based on `OPENCLAW_BACKUP_CRON`
 - Shutdown backup: when the container receives a stop signal, one final backup is uploaded before exit
 - Each backup upload includes:
   - `backups/openclaw-backup-<timestamp>.tar.gz`
     - archive root `openclaw-state/`
     - archive root `root-config/` (included when `OPENCLAW_BACKUP_ROOT_CONFIG_DIR` exists)
+    - archive root `root-codex/` (included when `OPENCLAW_BACKUP_ROOT_CODEX_DIR` exists)
+    - archive root `root-claude/` (included when `OPENCLAW_BACKUP_ROOT_CLAUDE_DIR` exists)
+    - archive root `root-agents/` (included when `OPENCLAW_BACKUP_ROOT_AGENTS_DIR` exists)
   - `latest-backup.tar.gz`
   - `latest-backup.json`
 - Retention: after upload, only the newest `OPENCLAW_BACKUP_KEEP_COUNT` timestamped archives are kept (default `48`); older timestamped archives are deleted automatically

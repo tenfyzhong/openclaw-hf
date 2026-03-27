@@ -40,6 +40,9 @@ class BackupTests(unittest.TestCase):
         self.assertEqual(config.state_dir, Path("/root/.openclaw").resolve())
         self.assertEqual(config.backup_source_dir, config.state_dir)
         self.assertEqual(config.root_config_dir, Path("/root/.config").resolve())
+        self.assertEqual(config.root_codex_dir, Path("/root/.codex").resolve())
+        self.assertEqual(config.root_claude_dir, Path("/root/.claude").resolve())
+        self.assertEqual(config.root_agents_dir, Path("/root/.agents").resolve())
         self.assertEqual(config.keep_count, 48)
 
     def test_from_env_defaults_backup_source_to_explicit_state_dir_when_unset(self):
@@ -88,6 +91,29 @@ class BackupTests(unittest.TestCase):
                 config = BackupConfig.from_env()
 
             self.assertEqual(config.root_config_dir, root_config.resolve())
+
+    def test_from_env_uses_explicit_other_root_dirs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            root_codex = tmp_path / "root-codex"
+            root_claude = tmp_path / "root-claude"
+            root_agents = tmp_path / "root-agents"
+            root_codex.mkdir()
+            root_claude.mkdir()
+            root_agents.mkdir()
+
+            env = {
+                "OPENCLAW_BACKUP_DATASET_REPO": "user/demo-backup",
+                "OPENCLAW_BACKUP_ROOT_CODEX_DIR": str(root_codex),
+                "OPENCLAW_BACKUP_ROOT_CLAUDE_DIR": str(root_claude),
+                "OPENCLAW_BACKUP_ROOT_AGENTS_DIR": str(root_agents),
+            }
+            with mock.patch.dict("os.environ", env, clear=True):
+                config = BackupConfig.from_env()
+
+            self.assertEqual(config.root_codex_dir, root_codex.resolve())
+            self.assertEqual(config.root_claude_dir, root_claude.resolve())
+            self.assertEqual(config.root_agents_dir, root_agents.resolve())
 
     def test_from_env_uses_explicit_backup_keep_count(self):
         env = {
@@ -158,21 +184,33 @@ class BackupTests(unittest.TestCase):
 
             self.assertIn("openclaw-state/from-home-node.txt", members)
 
-    def test_create_archive_contains_root_config_tree_when_exists(self):
+    def test_create_archive_contains_extra_root_trees_when_exist(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             state_dir = tmp_path / "state"
             root_config_dir = tmp_path / "root-config"
+            root_codex_dir = tmp_path / "root-codex"
+            root_claude_dir = tmp_path / "root-claude"
+            root_agents_dir = tmp_path / "root-agents"
             state_dir.mkdir(parents=True)
             root_config_dir.mkdir(parents=True)
+            root_codex_dir.mkdir(parents=True)
+            root_claude_dir.mkdir(parents=True)
+            root_agents_dir.mkdir(parents=True)
             (state_dir / "state.txt").write_text("state\n", encoding="utf-8")
             (root_config_dir / "settings.json").write_text('{"key":"value"}\n', encoding="utf-8")
+            (root_codex_dir / "config.toml").write_text("theme = \"dark\"\n", encoding="utf-8")
+            (root_claude_dir / "profile.json").write_text('{"provider":"claude"}\n', encoding="utf-8")
+            (root_agents_dir / "agent.yaml").write_text("name: default\n", encoding="utf-8")
 
             config = BackupConfig(
                 dataset_repo="user/demo-backup",
                 state_dir=state_dir,
                 backup_source_dir=state_dir,
                 root_config_dir=root_config_dir,
+                root_codex_dir=root_codex_dir,
+                root_claude_dir=root_claude_dir,
+                root_agents_dir=root_agents_dir,
                 work_dir=tmp_path / "work",
                 repo_type="dataset",
                 path_prefix="backups",
@@ -189,6 +227,9 @@ class BackupTests(unittest.TestCase):
 
             self.assertIn("openclaw-state/state.txt", members)
             self.assertIn("root-config/settings.json", members)
+            self.assertIn("root-codex/config.toml", members)
+            self.assertIn("root-claude/profile.json", members)
+            self.assertIn("root-agents/agent.yaml", members)
 
     def test_upload_backup_writes_timestamp_and_latest(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -261,34 +302,58 @@ class BackupTests(unittest.TestCase):
                 ],
             )
 
-    def test_restore_restores_root_config_when_present_in_archive(self):
+    def test_restore_restores_extra_root_dirs_when_present_in_archive(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             state_target = tmp_path / "state-target"
             root_config_target = tmp_path / "root-config-target"
+            root_codex_target = tmp_path / "root-codex-target"
+            root_claude_target = tmp_path / "root-claude-target"
+            root_agents_target = tmp_path / "root-agents-target"
             state_target.mkdir(parents=True)
             root_config_target.mkdir(parents=True)
+            root_codex_target.mkdir(parents=True)
+            root_claude_target.mkdir(parents=True)
+            root_agents_target.mkdir(parents=True)
             (state_target / "old-state.txt").write_text("old-state\n", encoding="utf-8")
             (root_config_target / "old-config.json").write_text('{"old":true}\n', encoding="utf-8")
+            (root_codex_target / "old-codex.toml").write_text("old = true\n", encoding="utf-8")
+            (root_claude_target / "old-claude.json").write_text('{"old":true}\n', encoding="utf-8")
+            (root_agents_target / "old-agent.yaml").write_text("old: true\n", encoding="utf-8")
 
             restore_payload = tmp_path / "restore-payload"
             restore_state = restore_payload / "openclaw-state"
             restore_root_config = restore_payload / "root-config"
+            restore_root_codex = restore_payload / "root-codex"
+            restore_root_claude = restore_payload / "root-claude"
+            restore_root_agents = restore_payload / "root-agents"
             restore_state.mkdir(parents=True)
             restore_root_config.mkdir(parents=True)
+            restore_root_codex.mkdir(parents=True)
+            restore_root_claude.mkdir(parents=True)
+            restore_root_agents.mkdir(parents=True)
             (restore_state / "new-state.txt").write_text("new-state\n", encoding="utf-8")
             (restore_root_config / "new-config.json").write_text('{"new":true}\n', encoding="utf-8")
+            (restore_root_codex / "new-codex.toml").write_text("new = true\n", encoding="utf-8")
+            (restore_root_claude / "new-claude.json").write_text('{"new":true}\n', encoding="utf-8")
+            (restore_root_agents / "new-agent.yaml").write_text("new: true\n", encoding="utf-8")
 
             archive = tmp_path / "latest-backup.tar.gz"
             with tarfile.open(archive, "w:gz") as tar:
                 tar.add(str(restore_state), arcname="openclaw-state")
                 tar.add(str(restore_root_config), arcname="root-config")
+                tar.add(str(restore_root_codex), arcname="root-codex")
+                tar.add(str(restore_root_claude), arcname="root-claude")
+                tar.add(str(restore_root_agents), arcname="root-agents")
 
             config = BackupConfig(
                 dataset_repo="user/demo-backup",
                 state_dir=state_target,
                 backup_source_dir=state_target,
                 root_config_dir=root_config_target,
+                root_codex_dir=root_codex_target,
+                root_claude_dir=root_claude_target,
+                root_agents_dir=root_agents_target,
                 work_dir=tmp_path / "work",
                 repo_type="dataset",
                 path_prefix="backups",
@@ -305,16 +370,31 @@ class BackupTests(unittest.TestCase):
             self.assertFalse((state_target / "old-state.txt").exists())
             self.assertTrue((root_config_target / "new-config.json").exists())
             self.assertFalse((root_config_target / "old-config.json").exists())
+            self.assertTrue((root_codex_target / "new-codex.toml").exists())
+            self.assertFalse((root_codex_target / "old-codex.toml").exists())
+            self.assertTrue((root_claude_target / "new-claude.json").exists())
+            self.assertFalse((root_claude_target / "old-claude.json").exists())
+            self.assertTrue((root_agents_target / "new-agent.yaml").exists())
+            self.assertFalse((root_agents_target / "old-agent.yaml").exists())
 
-    def test_restore_keeps_root_config_untouched_when_archive_missing_it(self):
+    def test_restore_keeps_extra_root_dirs_untouched_when_archive_missing_them(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             state_target = tmp_path / "state-target"
             root_config_target = tmp_path / "root-config-target"
+            root_codex_target = tmp_path / "root-codex-target"
+            root_claude_target = tmp_path / "root-claude-target"
+            root_agents_target = tmp_path / "root-agents-target"
             state_target.mkdir(parents=True)
             root_config_target.mkdir(parents=True)
+            root_codex_target.mkdir(parents=True)
+            root_claude_target.mkdir(parents=True)
+            root_agents_target.mkdir(parents=True)
             (state_target / "old-state.txt").write_text("old-state\n", encoding="utf-8")
             (root_config_target / "old-config.json").write_text('{"old":true}\n', encoding="utf-8")
+            (root_codex_target / "old-codex.toml").write_text("old = true\n", encoding="utf-8")
+            (root_claude_target / "old-claude.json").write_text('{"old":true}\n', encoding="utf-8")
+            (root_agents_target / "old-agent.yaml").write_text("old: true\n", encoding="utf-8")
 
             restore_payload = tmp_path / "restore-payload"
             restore_state = restore_payload / "openclaw-state"
@@ -330,6 +410,9 @@ class BackupTests(unittest.TestCase):
                 state_dir=state_target,
                 backup_source_dir=state_target,
                 root_config_dir=root_config_target,
+                root_codex_dir=root_codex_target,
+                root_claude_dir=root_claude_target,
+                root_agents_dir=root_agents_target,
                 work_dir=tmp_path / "work",
                 repo_type="dataset",
                 path_prefix="backups",
@@ -345,6 +428,9 @@ class BackupTests(unittest.TestCase):
             self.assertTrue((state_target / "new-state.txt").exists())
             self.assertFalse((state_target / "old-state.txt").exists())
             self.assertTrue((root_config_target / "old-config.json").exists())
+            self.assertTrue((root_codex_target / "old-codex.toml").exists())
+            self.assertTrue((root_claude_target / "old-claude.json").exists())
+            self.assertTrue((root_agents_target / "old-agent.yaml").exists())
 
     def test_replace_dir_contents_clears_old_files(self):
         with tempfile.TemporaryDirectory() as tmp:
