@@ -26,11 +26,14 @@ RUN printf 'Acquire::Retries "5";\nAcquire::http::Timeout "30";\nAcquire::https:
           libatk-bridge2.0-0 \
           libatk1.0-0 \
           libatspi2.0-0 \
+          libcairo2 \
+          libcups2t64 \
           libdbus-1-3 \
           libgbm1 \
           libglib2.0-0 \
           libnspr4 \
           libnss3 \
+          libpango-1.0-0 \
           libx11-6 \
           libxcb1 \
           libxcomposite1 \
@@ -65,17 +68,17 @@ RUN /bin/bash -lc 'set -euo pipefail; \
     case "$DEB_ARCH" in \
       amd64) CFT_ARCH=linux64 ;; \
       arm64) CFT_ARCH=linux-arm64 ;; \
-      *) echo "unsupported architecture for chrome-headless-shell: $DEB_ARCH" >&2; exit 1 ;; \
+      *) echo "unsupported architecture for chromium: $DEB_ARCH" >&2; exit 1 ;; \
     esac; \
-    CFT_ZIP="chrome-headless-shell-${CFT_ARCH}.zip"; \
-    CFT_DIR="chrome-headless-shell-${CFT_ARCH}"; \
+    CFT_ZIP="chrome-${CFT_ARCH}.zip"; \
+    CFT_DIR="chrome-${CFT_ARCH}"; \
     CFT_URL="https://storage.googleapis.com/chrome-for-testing-public/${CFT_VERSION}/${CFT_ARCH}/${CFT_ZIP}"; \
     curl -fsSL "$CFT_URL" -o "/tmp/${CFT_ZIP}"; \
     rm -rf "/opt/${CFT_DIR}"; \
     unzip -q "/tmp/${CFT_ZIP}" -d /opt; \
     rm -f "/tmp/${CFT_ZIP}"; \
-    ln -sf "/opt/${CFT_DIR}/chrome-headless-shell" /usr/local/bin/chromium-headless-shell; \
-    chromium-headless-shell --version >/dev/null'
+    ln -sf "/opt/${CFT_DIR}/chrome" /usr/local/bin/chromium; \
+    chromium --version >/dev/null'
 
 RUN /bin/bash -lc 'set -euo pipefail; \
     OPENCLAW_VERSION_VALUE="${OPENCLAW_VERSION:-latest}"; \
@@ -127,7 +130,7 @@ RUN python3 -m pip install --no-cache-dir --break-system-packages "huggingface_h
 RUN python3 --version >/dev/null && \
     gh --version >/dev/null && \
     nvim --version >/dev/null && \
-    command -v chromium-headless-shell >/dev/null
+    command -v chromium >/dev/null
 
 RUN HOME=/root /bin/bash -lc "curl -sSf https://sshx.io/get | sh" && \
     if [ -x /root/.local/bin/sshx ]; then ln -sf /root/.local/bin/sshx /usr/local/bin/sshx; fi && \
