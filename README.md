@@ -18,7 +18,7 @@ This setup is designed to provide the following:
 - Store OpenClaw config/workspace under `/root/.openclaw`
 - Restore state automatically from a Hugging Face Dataset on startup
 - Run scheduled backups of OpenClaw data to a Hugging Face Dataset via `cron` (as `root` user)
-- Preinstall `vim`, `opencode`, `codex`, `claude` (Claude Code CLI), and `sshx` in the image for interactive terminal use
+- Preinstall `python3`, `uv`, `vim`, `neovim`, `chromium-headless-shell`, `gh`, `hf`, `opencode`, `codex`, `claude` (Claude Code CLI), and `sshx` in the image for interactive terminal use
 
 ## Repository Layout
 
@@ -71,6 +71,8 @@ In that case, you can still configure from inside the container (for example via
 - `OPENCLAW_BACKUP_ROOT_CODEX_DIR` (default: `/root/.codex`, additional backup/restore directory for `root-codex`)
 - `OPENCLAW_BACKUP_ROOT_CLAUDE_DIR` (default: `/root/.claude`, additional backup/restore directory for `root-claude`)
 - `OPENCLAW_BACKUP_ROOT_AGENTS_DIR` (default: `/root/.agents`, additional backup/restore directory for `root-agents`)
+- `OPENCLAW_BACKUP_ROOT_SSH_DIR` (default: `/root/.ssh`, additional backup/restore directory for `root-ssh`)
+- `OPENCLAW_BACKUP_ROOT_NPM_DIR` (default: `/root/.npm`, additional backup/restore directory for `root-npm`)
 - `OPENCLAW_BACKUP_PATH_PREFIX` (default: `backups`)
 - `OPENCLAW_BACKUP_LATEST_NAME` (default: `latest-backup.tar.gz`)
 - `OPENCLAW_BACKUP_KEEP_COUNT` (default: `48`, keep newest N timestamped backup archives; older ones are auto-deleted)
@@ -305,6 +307,8 @@ For this project, if you need stable dashboard access without cold starts, use p
   - `root-codex` -> `OPENCLAW_BACKUP_ROOT_CODEX_DIR` (default `/root/.codex`, restored only when present in archive)
   - `root-claude` -> `OPENCLAW_BACKUP_ROOT_CLAUDE_DIR` (default `/root/.claude`, restored only when present in archive)
   - `root-agents` -> `OPENCLAW_BACKUP_ROOT_AGENTS_DIR` (default `/root/.agents`, restored only when present in archive)
+  - `root-ssh` -> `OPENCLAW_BACKUP_ROOT_SSH_DIR` (default `/root/.ssh`, restored only when present in archive)
+  - `root-npm` -> `OPENCLAW_BACKUP_ROOT_NPM_DIR` (default `/root/.npm`, restored only when present in archive)
 - Scheduled backup: cron runs based on `OPENCLAW_BACKUP_CRON`
 - Shutdown backup: when the container receives a stop signal, one final backup is uploaded before exit
 - Each backup upload includes:
@@ -314,6 +318,8 @@ For this project, if you need stable dashboard access without cold starts, use p
     - archive root `root-codex/` (included when `OPENCLAW_BACKUP_ROOT_CODEX_DIR` exists)
     - archive root `root-claude/` (included when `OPENCLAW_BACKUP_ROOT_CLAUDE_DIR` exists)
     - archive root `root-agents/` (included when `OPENCLAW_BACKUP_ROOT_AGENTS_DIR` exists)
+    - archive root `root-ssh/` (included when `OPENCLAW_BACKUP_ROOT_SSH_DIR` exists)
+    - archive root `root-npm/` (included when `OPENCLAW_BACKUP_ROOT_NPM_DIR` exists)
   - `latest-backup.tar.gz`
   - `latest-backup.json`
 - Retention: after upload, only the newest `OPENCLAW_BACKUP_KEEP_COUNT` timestamped archives are kept (default `48`); older timestamped archives are deleted automatically
