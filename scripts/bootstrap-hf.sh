@@ -4,6 +4,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 HF_TOKEN_FILE="${HF_TOKEN_FILE:-$HOME/.cache/huggingface/token}"
+RESTORE_HF_LOGIN_REQUIRED=0
+RESTORE_HF_LOGIN_TOKEN=""
+RESTORE_HF_LOGIN_USERNAME=""
 
 trim() {
   printf '%s' "$1" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
@@ -58,14 +61,46 @@ prompt_required() {
 prompt_secret_optional() {
   local prompt="$1"
   local value=""
+  local char=""
 
-  if [[ -t 0 ]]; then
-    read -r -s -p "$prompt: " value || true
+  if [[ -t 0 && -t 1 ]]; then
+    printf '%s: ' "$prompt" >&2
+    while IFS= read -r -s -n 1 char; do
+      if [[ -z "$char" ]]; then
+        break
+      fi
+      case "$char" in
+        $'\177'|$'\b')
+          if [[ -n "$value" ]]; then
+            value="${value%?}"
+            printf '\b \b' >&2
+          fi
+          ;;
+        *)
+          value+="$char"
+          printf '*' >&2
+          ;;
+      esac
+    done
     printf '\n' >&2
   else
     read -r -p "$prompt: " value || true
   fi
   printf '%s' "$(trim "${value:-}")"
+}
+
+prompt_secret_required() {
+  local prompt="$1"
+  local value=""
+
+  while [[ -z "$value" ]]; do
+    value="$(prompt_secret_optional "$prompt")"
+    value="$(trim "$value")"
+    if [[ -z "$value" ]]; then
+      printf 'This value is required.\n' >&2
+    fi
+  done
+  printf '%s' "$value"
 }
 
 prompt_yes_no() {
@@ -100,6 +135,33 @@ prompt_yes_no() {
         ;;
     esac
   done
+}
+
+login_with_hf_token() {
+  local token="$1"
+
+  hf auth login --token "$token" >/dev/null 2>&1 || die "hf auth login with token failed."
+}
+
+restore_previous_hf_login_if_needed() {
+  if [[ "$RESTORE_HF_LOGIN_REQUIRED" -ne 1 ]]; then
+    return 0
+  fi
+  if [[ -z "$RESTORE_HF_LOGIN_TOKEN" ]]; then
+    error "Skip restoring previous HF login because backup token is empty."
+    RESTORE_HF_LOGIN_REQUIRED=0
+    return 0
+  fi
+
+  local display_user="${RESTORE_HF_LOGIN_USERNAME:-unknown}"
+  info "Restoring previous HF login for user: $display_user"
+  if hf auth login --token "$RESTORE_HF_LOGIN_TOKEN" >/dev/null 2>&1; then
+    info "Previous HF login restored."
+  else
+    error "Failed to restore previous HF login. Please run: hf auth login"
+  fi
+
+  RESTORE_HF_LOGIN_REQUIRED=0
 }
 
 ensure_git() {
@@ -287,6 +349,9 @@ PY
 }
 main() {
   local hf_username
+  local use_current_hf_user
+  local current_hf_username
+  local switch_hf_token
   local space_name
   local dataset_name
   local space_repo_id
@@ -297,7 +362,6 @@ main() {
   local gateway_password
   local generated_gateway_token=0
   local generated_gateway_password=0
-  local current_hf_token
   local hf_token_for_backup
   local configure_llm
   local llm_base_url=""
@@ -322,10 +386,38 @@ main() {
   hf version
   python3 --version
 
+  trap 'restore_previous_hf_login_if_needed' EXIT
+
   if ! hf auth whoami >/dev/null 2>&1; then
-    info "HF CLI is not logged in. Starting 'hf auth login'..."
-    hf auth login
+    info "HF CLI is not logged in."
+    hf_token_for_backup="$(prompt_secret_required "HF_TOKEN (required for hf auth login)")"
+    login_with_hf_token "$hf_token_for_backup"
+  else
+    current_hf_username="$(trim "$(get_hf_username)")"
+    if [[ -n "$current_hf_username" ]]; then
+      use_current_hf_user="$(prompt_yes_no "HF CLI is already logged in as '$current_hf_username'. Use this user?" "y")"
+    else
+      use_current_hf_user="$(prompt_yes_no "HF CLI is already logged in. Use current user?" "y")"
+    fi
+
+    if [[ "$use_current_hf_user" == "yes" ]]; then
+      hf_token_for_backup="$(read_current_hf_token)"
+      if [[ -z "$hf_token_for_backup" ]]; then
+        hf_token_for_backup="$(prompt_secret_required "Cannot read current token. Enter HF_TOKEN")"
+        login_with_hf_token "$hf_token_for_backup"
+      fi
+    else
+      RESTORE_HF_LOGIN_TOKEN="$(read_current_hf_token)"
+      [[ -n "$RESTORE_HF_LOGIN_TOKEN" ]] || die "Cannot backup current HF token. Ensure current token is readable before switching users."
+      RESTORE_HF_LOGIN_REQUIRED=1
+      RESTORE_HF_LOGIN_USERNAME="$current_hf_username"
+
+      switch_hf_token="$(prompt_secret_required "HF_TOKEN for switching HF user")"
+      login_with_hf_token "$switch_hf_token"
+      hf_token_for_backup="$switch_hf_token"
+    fi
   fi
+  [[ -n "$hf_token_for_backup" ]] || die "HF_TOKEN is required to configure Space secret HF_TOKEN."
 
   hf_username="$(get_hf_username)"
   hf_username="$(trim "$hf_username")"
@@ -355,13 +447,6 @@ main() {
     gateway_password="$(openssl rand -hex 8)"
     generated_gateway_password=1
   fi
-
-  current_hf_token="$(read_current_hf_token)"
-  hf_token_for_backup="$(prompt_secret_optional "HF_TOKEN for backup dataset (optional, leave empty to reuse current login token)")"
-  if [[ -z "$hf_token_for_backup" ]]; then
-    hf_token_for_backup="$current_hf_token"
-  fi
-  [[ -n "$hf_token_for_backup" ]] || die "HF_TOKEN is required to configure Space secret HF_TOKEN."
 
   configure_llm="$(prompt_yes_no "Configure custom LLM now?" "n")"
   if [[ "$configure_llm" == "yes" ]]; then
