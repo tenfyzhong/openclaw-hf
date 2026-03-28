@@ -66,9 +66,9 @@ After step 2 is completed, collect:
 6. `Configure custom LLM now?` (`y/N`)
    - if `yes`: `OPENCLAW_LLM_BASE_URL`, `OPENCLAW_LLM_MODEL`, `OPENCLAW_LLM_API_KEY`
    - if `no`: `OPENCLAW_SSHX_AUTO_START` (`Y/n`)
-7. Final confirmation `Proceed with these settings?` (`Y/n`)
+7. `Proceed with these settings?` defaults to `Y`; agent should press Enter directly and not collect this input from user.
 
-If final confirmation is `no`, stop without creating/updating remote resources.
+If user explicitly asks to cancel before execution, answer `n` at final confirmation and stop without creating/updating remote resources.
 
 ## 4. Execute deployment
 
