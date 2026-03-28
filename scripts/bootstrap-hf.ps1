@@ -4,6 +4,9 @@ $ErrorActionPreference = "Stop"
 $script_dir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
 $repo_root = (Resolve-Path (Join-Path $script_dir "..")).Path
 $hf_token_file = if ($env:HF_TOKEN_FILE) { $env:HF_TOKEN_FILE } else { Join-Path $HOME ".cache/huggingface/token" }
+$script:RestoreHfLoginRequired = $false
+$script:RestoreHfLoginToken = ""
+$script:RestoreHfLoginUsername = ""
 
 function Trim-Value {
   param([AllowNull()][string]$Value)
@@ -114,6 +117,18 @@ function Prompt-SecretOptional {
   return Trim-Value $plain_text
 }
 
+function Prompt-SecretRequired {
+  param([string]$Prompt)
+
+  while ($true) {
+    $value = Trim-Value (Prompt-SecretOptional -Prompt $Prompt)
+    if (-not [string]::IsNullOrEmpty($value)) {
+      return $value
+    }
+    Write-Host "This value is required." -ForegroundColor Red
+  }
+}
+
 function Prompt-YesNo {
   param(
     [string]$Prompt,
@@ -137,6 +152,37 @@ function Prompt-YesNo {
       }
     }
   }
+}
+
+function Login-WithHfToken {
+  param([string]$Token)
+
+  & hf auth login --token $Token *> $null
+  if ($LASTEXITCODE -ne 0) {
+    Fail "hf auth login with token failed."
+  }
+}
+
+function Restore-PreviousHfLoginIfNeeded {
+  if (-not $script:RestoreHfLoginRequired) {
+    return
+  }
+  if ([string]::IsNullOrEmpty($script:RestoreHfLoginToken)) {
+    Write-Error "Skip restoring previous HF login because backup token is empty."
+    $script:RestoreHfLoginRequired = $false
+    return
+  }
+
+  $display_user = if ([string]::IsNullOrEmpty($script:RestoreHfLoginUsername)) { "unknown" } else { $script:RestoreHfLoginUsername }
+  Write-Info "Restoring previous HF login for user: $display_user"
+  & hf auth login --token $script:RestoreHfLoginToken *> $null
+  if ($LASTEXITCODE -eq 0) {
+    Write-Info "Previous HF login restored."
+  } else {
+    Write-Error "Failed to restore previous HF login. Please run: hf auth login"
+  }
+
+  $script:RestoreHfLoginRequired = $false
 }
 
 function New-RandomHex {
@@ -414,15 +460,43 @@ function Main {
     & hf version
     & python3 --version
   }
-  Invoke-Step -Message "Ensure HF CLI login is active" -Action {
+
+  $hf_token_for_backup = ""
+  Invoke-Step -Message "Resolve HF login and HF_TOKEN" -Action {
     if (-not (Test-HfLoggedIn)) {
-      Write-Info "HF CLI is not logged in. Starting 'hf auth login'..."
-      & hf auth login
-      if ($LASTEXITCODE -ne 0) {
-        Fail "hf auth login failed."
-      }
+      Write-Info "HF CLI is not logged in."
+      $hf_token_for_backup = Prompt-SecretRequired -Prompt "HF_TOKEN (required for hf auth login)"
+      Login-WithHfToken -Token $hf_token_for_backup
     } else {
-      Write-Info "HF CLI login already active."
+      $current_hf_username = Trim-Value (Get-HfUsername)
+      if ([string]::IsNullOrEmpty($current_hf_username)) {
+        $use_current_hf_user = Prompt-YesNo -Prompt "HF CLI is already logged in. Use current user?" -DefaultValue "y"
+      } else {
+        $use_current_hf_user = Prompt-YesNo -Prompt "HF CLI is already logged in as '$current_hf_username'. Use this user?" -DefaultValue "y"
+      }
+
+      if ($use_current_hf_user -eq "yes") {
+        $hf_token_for_backup = Trim-Value (Read-CurrentHfToken)
+        if ([string]::IsNullOrEmpty($hf_token_for_backup)) {
+          $hf_token_for_backup = Prompt-SecretRequired -Prompt "Cannot read current token. Enter HF_TOKEN"
+          Login-WithHfToken -Token $hf_token_for_backup
+        }
+      } else {
+        $script:RestoreHfLoginToken = Trim-Value (Read-CurrentHfToken)
+        if ([string]::IsNullOrEmpty($script:RestoreHfLoginToken)) {
+          Fail "Cannot backup current HF token. Ensure current token is readable before switching users."
+        }
+        $script:RestoreHfLoginRequired = $true
+        $script:RestoreHfLoginUsername = $current_hf_username
+
+        $switch_hf_token = Prompt-SecretRequired -Prompt "HF_TOKEN for switching HF user"
+        Login-WithHfToken -Token $switch_hf_token
+        $hf_token_for_backup = $switch_hf_token
+      }
+    }
+
+    if ([string]::IsNullOrEmpty($hf_token_for_backup)) {
+      Fail "HF_TOKEN is required to configure Space secret HF_TOKEN."
     }
   }
 
@@ -473,18 +547,6 @@ function Main {
       $gateway_password = New-RandomHex -Length 16
       $generated_gateway_password = $true
       Write-Info "OPENCLAW_GATEWAY_PASSWORD generated automatically."
-    }
-  }
-
-  $hf_token_for_backup = ""
-  Invoke-Step -Message "Collect HF_TOKEN for backup dataset" -Action {
-    $current_hf_token = Read-CurrentHfToken
-    $hf_token_for_backup = Prompt-SecretOptional -Prompt "HF_TOKEN for backup dataset (optional, leave empty to reuse current login token)"
-    if ([string]::IsNullOrEmpty($hf_token_for_backup)) {
-      $hf_token_for_backup = $current_hf_token
-    }
-    if ([string]::IsNullOrEmpty($hf_token_for_backup)) {
-      Fail "HF_TOKEN is required to configure Space secret HF_TOKEN."
     }
   }
 
@@ -606,4 +668,7 @@ try {
 catch {
   Write-Error $_.Exception.Message
   exit 1
+}
+finally {
+  Restore-PreviousHfLoginIfNeeded
 }

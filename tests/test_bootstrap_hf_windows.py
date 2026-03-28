@@ -40,6 +40,22 @@ class BootstrapHfWindowsScriptTests(unittest.TestCase):
         self.assertIn('Set-SpaceSecretLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_GATEWAY_TOKEN" -Value $gateway_token -ApiToken $api_token', content)
         self.assertIn('Set-SpaceSecretLogged -SpaceRepoId $space_repo_id -Key "OPENCLAW_GATEWAY_PASSWORD" -Value $gateway_password -ApiToken $api_token', content)
 
+    def test_hf_login_flow_supports_switch_and_restore(self):
+        content = self._script_text()
+        self.assertIn('Prompt-YesNo -Prompt "HF CLI is already logged in as \'$current_hf_username\'. Use this user?" -DefaultValue "y"', content)
+        self.assertIn('$switch_hf_token = Prompt-SecretRequired -Prompt "HF_TOKEN for switching HF user"', content)
+        self.assertIn('Login-WithHfToken -Token $switch_hf_token', content)
+        self.assertIn('Restore-PreviousHfLoginIfNeeded', content)
+        self.assertIn('& hf auth login --token $script:RestoreHfLoginToken *> $null', content)
+
+    def test_hf_token_prompt_happens_before_other_bootstrap_inputs(self):
+        content = self._script_text()
+        self.assertLess(
+            content.index('Invoke-Step -Message "Resolve HF login and HF_TOKEN" -Action {'),
+            content.index('Invoke-Step -Message "Collect Space and Dataset names" -Action {'),
+        )
+        self.assertNotIn('Prompt-SecretOptional -Prompt "HF_TOKEN for backup dataset (optional, leave empty to reuse current login token)"', content)
+
     def test_does_not_prompt_or_restart_space(self):
         content = self._script_text()
         self.assertNotIn('Prompt-YesNo -Prompt "Restart Space at the end?"', content)

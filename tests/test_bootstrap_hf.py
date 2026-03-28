@@ -29,6 +29,10 @@ class BootstrapHfScriptTests(unittest.TestCase):
                 set -euo pipefail
                 echo "hf $*" >>"${TRACE_FILE}"
                 if [[ "${1:-}" == "auth" && "${2:-}" == "whoami" ]]; then
+                  if [[ "${HF_WHOAMI_EXIT_CODE:-0}" != "0" ]]; then
+                    echo "not logged in" >&2
+                    exit "${HF_WHOAMI_EXIT_CODE}"
+                  fi
                   if [[ -n "${HF_WHOAMI_OUTPUT:-}" ]]; then
                     echo "${HF_WHOAMI_OUTPUT}"
                   else
@@ -140,10 +144,10 @@ class BootstrapHfScriptTests(unittest.TestCase):
                 }
             )
 
-            # space_name, dataset_name, openclaw_version(blank -> default latest),
-            # gateway_token(blank), gateway_password(blank), HF_TOKEN(blank -> reuse current token),
-            # configure_llm(no), sshx_auto_start(yes), proceed(yes)
-            user_input = "demo-space\ndemo-backup\n\n\n\n\nn\ny\ny\n"
+            # use current HF user(yes), space_name, dataset_name,
+            # openclaw_version(blank -> default latest), gateway_token(blank),
+            # gateway_password(blank), configure_llm(no), sshx_auto_start(yes), proceed(yes)
+            user_input = "\ndemo-space\ndemo-backup\n\n\n\nn\ny\ny\n"
 
             result = subprocess.run(
                 [str(self._script_path())],
@@ -204,10 +208,10 @@ class BootstrapHfScriptTests(unittest.TestCase):
                 }
             )
 
-            # hf_username (fallback prompt), space_name, dataset_name, openclaw_version(blank),
-            # gateway token/password/HF token(empty),
+            # use current HF user(yes), hf_username (fallback prompt), space_name, dataset_name,
+            # openclaw_version(blank), gateway token/password(empty),
             # configure_llm(no), sshx_auto_start(yes), proceed(yes)
-            user_input = "manual-user\ndemo-space\ndemo-backup\n\n\n\n\nn\ny\ny\n"
+            user_input = "\nmanual-user\ndemo-space\ndemo-backup\n\n\n\nn\ny\ny\n"
 
             result = subprocess.run(
                 [str(self._script_path())],
@@ -254,8 +258,8 @@ class BootstrapHfScriptTests(unittest.TestCase):
                 }
             )
 
-            # configure_llm(no), sshx_auto_start(no), proceed(yes)
-            user_input = "demo-space\ndemo-backup\n\n\n\n\nn\nn\ny\n"
+            # use current HF user(yes), configure_llm(no), sshx_auto_start(no), proceed(yes)
+            user_input = "\ndemo-space\ndemo-backup\n\n\n\nn\nn\ny\n"
 
             result = subprocess.run(
                 [str(self._script_path())],
@@ -279,6 +283,103 @@ class BootstrapHfScriptTests(unittest.TestCase):
                 "Space restart failed. You can restart manually from Hugging Face Space Settings.",
                 result.stderr,
             )
+
+    def test_prompts_for_hf_token_when_not_logged_in(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            home_dir = tmp_path / "home"
+            bin_dir = tmp_path / "bin"
+            trace_file = tmp_path / "trace.log"
+
+            bin_dir.mkdir(parents=True)
+            trace_file.write_text("", encoding="utf-8")
+            self._prepare_fake_tools(bin_dir)
+
+            env = os.environ.copy()
+            env.update(
+                {
+                    "HOME": str(home_dir),
+                    "TRACE_FILE": str(trace_file),
+                    "HF_WHOAMI_EXIT_CODE": "1",
+                    "PATH": f"{bin_dir}:{env.get('PATH', '')}",
+                }
+            )
+
+            # hf_token_for_login(required), hf_username(fallback prompt), space_name, dataset_name,
+            # openclaw_version(blank), gateway token/password(blank), configure_llm(no),
+            # sshx_auto_start(yes), proceed(yes)
+            user_input = "hf-login-token\nmanual-user\ndemo-space\ndemo-backup\n\n\n\nn\ny\ny\n"
+
+            result = subprocess.run(
+                [str(self._script_path())],
+                cwd=self._repo_root(),
+                env=env,
+                input=user_input,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(
+                result.returncode,
+                0,
+                msg=f"stdout:\n{result.stdout}\n\nstderr:\n{result.stderr}",
+            )
+
+            trace = trace_file.read_text(encoding="utf-8")
+            self.assertIn("hf auth login --token hf-login-token", trace)
+            self.assertIn("space-secret HF_TOKEN=hf-login-token", trace)
+            self.assertIn("HF user: manual-user", result.stdout)
+
+    def test_switches_logged_in_user_and_restores_original_token(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            home_dir = tmp_path / "home"
+            token_file = home_dir / ".cache" / "huggingface" / "token"
+            bin_dir = tmp_path / "bin"
+            trace_file = tmp_path / "trace.log"
+
+            bin_dir.mkdir(parents=True)
+            token_file.parent.mkdir(parents=True)
+            token_file.write_text("hf-current-token\n", encoding="utf-8")
+            trace_file.write_text("", encoding="utf-8")
+            self._prepare_fake_tools(bin_dir)
+
+            env = os.environ.copy()
+            env.update(
+                {
+                    "HOME": str(home_dir),
+                    "TRACE_FILE": str(trace_file),
+                    "PATH": f"{bin_dir}:{env.get('PATH', '')}",
+                }
+            )
+
+            # use current HF user(no), switch_hf_token(required), space_name, dataset_name,
+            # openclaw_version(blank), gateway token/password(blank), configure_llm(no),
+            # sshx_auto_start(yes), proceed(yes)
+            user_input = "n\nhf-switch-token\ndemo-space\ndemo-backup\n\n\n\nn\ny\ny\n"
+
+            result = subprocess.run(
+                [str(self._script_path())],
+                cwd=self._repo_root(),
+                env=env,
+                input=user_input,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(
+                result.returncode,
+                0,
+                msg=f"stdout:\n{result.stdout}\n\nstderr:\n{result.stderr}",
+            )
+
+            trace = trace_file.read_text(encoding="utf-8")
+            self.assertIn("hf auth login --token hf-switch-token", trace)
+            self.assertIn("hf auth login --token hf-current-token", trace)
+            self.assertEqual(trace.count("hf auth login --token"), 2)
+            self.assertIn("space-secret HF_TOKEN=hf-switch-token", trace)
 
     def test_prefers_user_configured_openclaw_version_from_env(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -304,10 +405,10 @@ class BootstrapHfScriptTests(unittest.TestCase):
                 }
             )
 
-            # space_name, dataset_name, openclaw_version(blank -> use env default),
-            # gateway token/password/HF token(blank), configure_llm(no),
-            # sshx_auto_start(yes), proceed(yes)
-            user_input = "demo-space\ndemo-backup\n\n\n\n\nn\ny\ny\n"
+            # use current HF user(yes), space_name, dataset_name,
+            # openclaw_version(blank -> use env default), gateway token/password(blank),
+            # configure_llm(no), sshx_auto_start(yes), proceed(yes)
+            user_input = "\ndemo-space\ndemo-backup\n\n\n\nn\ny\ny\n"
 
             result = subprocess.run(
                 [str(self._script_path())],
@@ -352,8 +453,8 @@ class BootstrapHfScriptTests(unittest.TestCase):
                 }
             )
 
-            # configure_llm(no), sshx_auto_start(yes), proceed(no)
-            user_input = "demo-space\ndemo-backup\n\n\n\n\nn\ny\nn\n"
+            # use current HF user(yes), configure_llm(no), sshx_auto_start(yes), proceed(no)
+            user_input = "\ndemo-space\ndemo-backup\n\n\n\nn\ny\nn\n"
 
             result = subprocess.run(
                 [str(self._script_path())],

@@ -98,7 +98,11 @@ powershell -ExecutionPolicy ByPass -File .\scripts\bootstrap-hf.ps1
 - Check/install `hf` CLI:
   - macOS/Linux: `curl -LsSf https://hf.co/cli/install.sh | bash`
   - Windows PowerShell: `powershell -ExecutionPolicy ByPass -c "irm https://hf.co/cli/install.ps1 | iex"`
-- Ensure HF login (`hf auth whoami` / `hf auth login`)
+- Resolve HF auth first (before all other variables):
+  - if `hf auth whoami` is not logged in: prompt `HF_TOKEN` and run `hf auth login --token <HF_TOKEN>`
+  - if already logged in: ask whether to use current user
+    - choose `yes`: continue
+    - choose `no`: backup current token, prompt new `HF_TOKEN`, run `hf auth login --token <HF_TOKEN>`, and restore the previous token at the end
 - Ask for `space_name`, `dataset_name`, `OPENCLAW_VERSION`, gateway token/password, and optional LLM settings
 - Default `OPENCLAW_VERSION` to latest detected from npm registry (`openclaw`), fallback `latest` when detection fails
 - Auto-generate `OPENCLAW_GATEWAY_TOKEN` (32 chars) and `OPENCLAW_GATEWAY_PASSWORD` (16 chars) if left empty
@@ -122,118 +126,8 @@ If gateway token/password were auto-generated, the script prints them at the end
 Copy and send to your agent:
 
 ```
-Please deploy OpenClaw to Hugging Face by strictly following the "Agent Deployment SOP (Collapsed)" section in https://github.com/tenfyzhong/openclaw-hf/blob/main/README.md
+Please deploy OpenClaw to Hugging Face by strictly following the deployment skill in https://github.com/tenfyzhong/openclaw-hf/blob/main/SKILL.md
 ```
-
-## Agent Deployment SOP (Collapsed)
-
-<details>
-<summary>Click to expand agent installation workflow</summary>
-
-This runbook is for agents that need to deploy this repo to Hugging Face.
-
-Deployment must reuse:
-
-- `./scripts/bootstrap-hf.sh` on macOS/Linux
-- `powershell -ExecutionPolicy ByPass -File .\scripts\bootstrap-hf.ps1` on Windows PowerShell
-
-Do not hand-roll a separate deployment flow unless the user explicitly asks for a manual fallback.
-
-### 1. Preflight check before collecting inputs
-
-Agent must check these dependencies first:
-
-```bash
-command -v git >/dev/null 2>&1 || MISSING_GIT=1
-command -v hf >/dev/null 2>&1 || MISSING_HF=1
-command -v python3 >/dev/null 2>&1 || MISSING_PYTHON3=1
-```
-
-If missing:
-
-- `git`: install with the OS package manager.
-- `hf`:
-  - macOS/Linux: `curl -LsSf https://hf.co/cli/install.sh | bash`
-  - Windows PowerShell: `powershell -ExecutionPolicy ByPass -c "irm https://hf.co/cli/install.ps1 | iex"`
-- `python3`: install with the OS package manager or official installer.
-
-Then verify:
-
-```bash
-git --version
-hf version
-python3 --version
-```
-
-Both bootstrap scripts also depend on Python package `huggingface_hub`:
-
-```bash
-python3 -c "import huggingface_hub" >/dev/null 2>&1 || \
-  python3 -m pip install --user 'huggingface_hub[cli]'
-```
-
-### 2. Ask user for inputs in the same order as the bootstrap script prompts (with explanations)
-
-Agent should ask in one consolidated message, in this order:
-
-1. `space_name` (default `openclaw-hf`): Space repo suffix, final ID is `<hf_username>/<space_name>`.
-2. `dataset_name` (default `<space_name>-backup`): backup Dataset suffix, final ID is `<hf_username>/<dataset_name>`.
-3. `OPENCLAW_VERSION` (default: latest version detected from npm, fallback `latest`): controls OpenClaw version installed in the container.
-4. `OPENCLAW_GATEWAY_TOKEN` (optional secret): if empty, script auto-generates 32 random characters and prints it at the end.
-5. `OPENCLAW_GATEWAY_PASSWORD` (optional secret): if empty, script auto-generates 16 random characters and prints it at the end.
-6. `HF_TOKEN for backup dataset` (optional secret): if empty, script reuses current local HF login token; token must have write access to the backup Dataset.
-7. `Configure custom LLM now?` (`y/N`):
-   - if `yes`, collect all 3: `OPENCLAW_LLM_BASE_URL`, `OPENCLAW_LLM_MODEL`, `OPENCLAW_LLM_API_KEY`.
-   - if `no`, ask whether to set `OPENCLAW_SSHX_AUTO_START=true` (`Y/n`) for later sshx-based setup. When answer is `no`, script sets `OPENCLAW_SSHX_AUTO_START=false`.
-8. `Proceed with these settings?` (`Y/n`):
-   - if `no`, script exits before creating Space/Dataset or applying any Space variable/secret changes.
-
-If `hf auth whoami` is not logged in, explain that the script will run `hf auth login` before deployment.
-
-### 3. Execute deployment via script
-
-From repo root:
-
-```bash
-./scripts/bootstrap-hf.sh
-```
-
-Or on Windows PowerShell:
-
-```powershell
-powershell -ExecutionPolicy ByPass -File .\scripts\bootstrap-hf.ps1
-```
-
-Agent should follow the script prompts step by step using the user-provided values in the same order.
-If the final confirmation prompt is `no`, stop and do not execute repository creation/upload/variable updates.
-
-The script will complete all deployment actions:
-
-- create private Space and private Dataset
-- upload repository to the Space
-- configure Space variables and secrets (including `OPENCLAW_BACKUP_DATASET_REPO`, `OPENCLAW_VERSION`, `HF_TOKEN`, gateway credentials, and optional LLM/SSHX settings)
-- set:
-  - `OPENCLAW_GATEWAY_CONTROLUI_ALLOW_INSECURE_AUTH=false`
-  - `OPENCLAW_GATEWAY_CONTROLUI_DANGEROUSLY_DISABLE_DEVICE_AUTH=false`
-- set `OPENCLAW_SSHX_AUTO_START=true` only when chosen; otherwise set `OPENCLAW_SSHX_AUTO_START=false`
-
-### 4. Final hand-off to user (required)
-
-Agent final message must include:
-
-- Space repo ID: `<owner>/<space_name>`
-- Space page URL: `https://huggingface.co/spaces/<owner>/<space_name>`
-- Dataset repo ID: `<owner>/<dataset_name>`
-- `OPENCLAW_VERSION` used
-- App URL: `https://<owner>-<space_name>.hf.space`
-- Health URL: `https://<owner>-<space_name>.hf.space/healthz`
-- If auto-generated, include `OPENCLAW_GATEWAY_TOKEN`
-- If auto-generated, include `OPENCLAW_GATEWAY_PASSWORD`
-- Keep-alive reminder:
-  - paid hardware + `Sleep time=Never` for strict 24/7 uptime
-  - free tier may sleep after inactivity
-
-</details>
 
 ## Hugging Face Keep-Alive
 
