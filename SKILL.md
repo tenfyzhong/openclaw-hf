@@ -31,7 +31,18 @@ python3 -c "import huggingface_hub" >/dev/null 2>&1 || python3 -m pip install --
 
 Install missing tools before continuing.
 
-## 2. HF auth flow must run first (before any other variables)
+## 2. Clone repository (required before deployment)
+
+Run:
+
+```bash
+git clone https://github.com/tenfyzhong/openclaw-hf.git
+cd openclaw-hf
+```
+
+Do not continue until the shell is inside the cloned `openclaw-hf` directory.
+
+## 3. HF auth flow must run first (before any other variables)
 
 1. If user already provided `HF_TOKEN` in the conversation:
    - use this `HF_TOKEN` directly: `hf auth login --token <HF_TOKEN>`
@@ -51,9 +62,9 @@ Install missing tools before continuing.
      - continue deployment with new account
      - after deployment, restore previous token
 
-## 3. Collect remaining inputs in prompt order
+## 4. Collect remaining inputs in prompt order
 
-After step 2 is completed, collect:
+After step 3 is completed, collect:
 
 1. `space_name` (default `openclaw-hf`)
 2. `dataset_name` (default `<space_name>-backup`)
@@ -67,9 +78,9 @@ After step 2 is completed, collect:
 
 If user explicitly asks to cancel before execution, answer `n` at final confirmation and stop without creating/updating remote resources.
 
-## 4. Execute deployment
+## 5. Execute deployment
 
-From repo root, run the platform-specific bootstrap script and follow prompts in order.
+From the cloned `openclaw-hf` repo root, run the platform-specific bootstrap script and follow prompts in order.
 
 The script will:
 
@@ -77,7 +88,7 @@ The script will:
 - upload repository to Space
 - configure Space variables and secrets, including `OPENCLAW_BACKUP_DATASET_REPO`, `OPENCLAW_VERSION`, `HF_TOKEN`, gateway secrets, and optional LLM/SSHX settings
 
-## 5. Required final hand-off
+## 6. Required final hand-off
 
 Agent final message must include:
 
@@ -89,3 +100,12 @@ Agent final message must include:
 - Health URL: `https://<owner>-<space_name>.hf.space/healthz`
 - auto-generated gateway token/password if generated
 - keep-alive note: free tier may sleep; paid hardware + `Sleep time=Never` for strict 24/7 uptime
+
+## 7. Cleanup local clone after deployment
+
+After deployment and final hand-off are done, remove the local cloned repository:
+
+```bash
+cd ..
+rm -rf openclaw-hf
+```
