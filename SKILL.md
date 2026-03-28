@@ -44,11 +44,15 @@ Do not continue until the shell is inside the cloned `openclaw-hf` directory.
 
 ## 3. HF auth flow must run first (before any other variables)
 
-1. Check login: `hf auth whoami`.
-2. If not logged in:
+1. If user already provided `HF_TOKEN` in the conversation:
+   - use this `HF_TOKEN` directly: `hf auth login --token <HF_TOKEN>`
+   - if a different user is currently logged in, backup current token first and restore it after deployment
+   - do not ask whether to keep current logged-in user
+2. Otherwise, check login: `hf auth whoami`.
+3. If not logged in:
    - ask user for `HF_TOKEN` (required)
    - run: `hf auth login --token <HF_TOKEN>`
-3. If already logged in:
+4. If already logged in:
    - ask whether to use current logged-in user
    - if `yes`: continue
    - if `no`:
@@ -57,13 +61,6 @@ Do not continue until the shell is inside the cloned `openclaw-hf` directory.
      - run: `hf auth login --token <HF_TOKEN>`
      - continue deployment with new account
      - after deployment, restore previous token
-
-Special agent rule:
-
-- If the user already provided `HF_TOKEN` in the conversation, still execute step 3 flow directly:
-  - ask whether to keep current logged-in user
-  - if user chooses switching account, use the provided `HF_TOKEN` for `hf auth login --token ...`
-  - restore previous token after deployment
 
 ## 4. Collect remaining inputs in prompt order
 
@@ -77,9 +74,9 @@ After step 3 is completed, collect:
 6. `Configure custom LLM now?` (`y/N`)
    - if `yes`: `OPENCLAW_LLM_BASE_URL`, `OPENCLAW_LLM_MODEL`, `OPENCLAW_LLM_API_KEY`
    - if `no`: `OPENCLAW_SSHX_AUTO_START` (`Y/n`)
-7. Final confirmation `Proceed with these settings?` (`Y/n`)
+7. `Proceed with these settings?` defaults to `Y`; agent should press Enter directly and not collect this input from user.
 
-If final confirmation is `no`, stop without creating/updating remote resources.
+If user explicitly asks to cancel before execution, answer `n` at final confirmation and stop without creating/updating remote resources.
 
 ## 5. Execute deployment
 
