@@ -136,14 +136,15 @@ RUN HOME=/root /bin/bash -lc "curl -sSf https://sshx.io/get | sh" && \
     if [ -x /root/.local/bin/sshx ]; then ln -sf /root/.local/bin/sshx /usr/local/bin/sshx; fi && \
     sshx --help >/dev/null
 
-WORKDIR /opt/openclaw-hf
+WORKDIR /root
 
 COPY openclaw_hf /opt/openclaw-hf/openclaw_hf
 COPY scripts/openclaw-entrypoint.sh /usr/local/bin/openclaw-entrypoint.sh
 COPY scripts/openclaw-backup-cron.sh /usr/local/bin/openclaw-backup-cron.sh
 COPY scripts/openclaw-restore.sh /usr/local/bin/openclaw-restore.sh
+COPY scripts/openclaw-gateway-restart /usr/local/bin/openclaw-gateway-restart
 
-RUN chmod 755 /usr/local/bin/openclaw-entrypoint.sh /usr/local/bin/openclaw-backup-cron.sh /usr/local/bin/openclaw-restore.sh && \
+RUN chmod 755 /usr/local/bin/openclaw-entrypoint.sh /usr/local/bin/openclaw-backup-cron.sh /usr/local/bin/openclaw-restore.sh /usr/local/bin/openclaw-gateway-restart && \
     mkdir -p /root/.openclaw/workspace /var/log/openclaw
 
 ENV NODE_ENV=production
