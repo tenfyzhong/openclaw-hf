@@ -27,6 +27,7 @@ This setup is designed to provide the following:
 - `openclaw_hf/backup.py`: Backup/restore implementation
 - `scripts/openclaw-backup-cron.sh`: Cron entrypoint for backup jobs
 - `scripts/openclaw-restore.sh`: Startup restore entrypoint
+- `scripts/openclaw-gateway-restart`: Kill running `openclaw-gateway` processes
 - `scripts/bootstrap-hf.sh`: Interactive bootstrap for Space/Dataset creation, upload, and Space variables/secrets setup (macOS/Linux)
 - `scripts/bootstrap-hf.ps1`: Interactive bootstrap for Space/Dataset creation, upload, and Space variables/secrets setup (Windows PowerShell)
 - `tests/test_backup.py`: Unit tests for the backup module
