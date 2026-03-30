@@ -259,6 +259,10 @@ pkill -TERM -f '(^|/)sshx($| )'
 python3 -m unittest discover -s tests -p 'test_*.py'
 ```
 
+Pull Requests to `main` run GitHub Actions CI automatically (`.github/workflows/pr-ci.yml`):
+- Unit tests: `python3 -m unittest discover -s tests -p 'test_*.py'`
+- Docker image build: `docker build` (via Buildx) with `OPENCLAW_VERSION=latest`
+
 ## License
 
 MIT. See `LICENSE`.
