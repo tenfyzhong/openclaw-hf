@@ -45,6 +45,7 @@ class BackupTests(unittest.TestCase):
         self.assertEqual(config.root_agents_dir, Path("/root/.agents").resolve())
         self.assertEqual(config.root_ssh_dir, Path("/root/.ssh").resolve())
         self.assertEqual(config.root_npm_dir, Path("/root/.npm").resolve())
+        self.assertEqual(config.root_lark_cli_dir, Path("/root/.lark-cli").resolve())
         self.assertEqual(config.keep_count, 48)
 
     def test_from_env_defaults_backup_source_to_explicit_state_dir_when_unset(self):
@@ -102,11 +103,13 @@ class BackupTests(unittest.TestCase):
             root_agents = tmp_path / "root-agents"
             root_ssh = tmp_path / "root-ssh"
             root_npm = tmp_path / "root-npm"
+            root_lark_cli = tmp_path / "root-lark-cli"
             root_codex.mkdir()
             root_claude.mkdir()
             root_agents.mkdir()
             root_ssh.mkdir()
             root_npm.mkdir()
+            root_lark_cli.mkdir()
 
             env = {
                 "OPENCLAW_BACKUP_DATASET_REPO": "user/demo-backup",
@@ -115,6 +118,7 @@ class BackupTests(unittest.TestCase):
                 "OPENCLAW_BACKUP_ROOT_AGENTS_DIR": str(root_agents),
                 "OPENCLAW_BACKUP_ROOT_SSH_DIR": str(root_ssh),
                 "OPENCLAW_BACKUP_ROOT_NPM_DIR": str(root_npm),
+                "OPENCLAW_BACKUP_ROOT_LARK_CLI_DIR": str(root_lark_cli),
             }
             with mock.patch.dict("os.environ", env, clear=True):
                 config = BackupConfig.from_env()
@@ -124,6 +128,7 @@ class BackupTests(unittest.TestCase):
             self.assertEqual(config.root_agents_dir, root_agents.resolve())
             self.assertEqual(config.root_ssh_dir, root_ssh.resolve())
             self.assertEqual(config.root_npm_dir, root_npm.resolve())
+            self.assertEqual(config.root_lark_cli_dir, root_lark_cli.resolve())
 
     def test_from_env_uses_explicit_backup_keep_count(self):
         env = {
@@ -204,6 +209,7 @@ class BackupTests(unittest.TestCase):
             root_agents_dir = tmp_path / "root-agents"
             root_ssh_dir = tmp_path / "root-ssh"
             root_npm_dir = tmp_path / "root-npm"
+            root_lark_cli_dir = tmp_path / "root-lark-cli"
             state_dir.mkdir(parents=True)
             root_config_dir.mkdir(parents=True)
             root_codex_dir.mkdir(parents=True)
@@ -211,6 +217,7 @@ class BackupTests(unittest.TestCase):
             root_agents_dir.mkdir(parents=True)
             root_ssh_dir.mkdir(parents=True)
             root_npm_dir.mkdir(parents=True)
+            root_lark_cli_dir.mkdir(parents=True)
             (state_dir / "state.txt").write_text("state\n", encoding="utf-8")
             (root_config_dir / "settings.json").write_text('{"key":"value"}\n', encoding="utf-8")
             (root_codex_dir / "config.toml").write_text("theme = \"dark\"\n", encoding="utf-8")
@@ -218,6 +225,7 @@ class BackupTests(unittest.TestCase):
             (root_agents_dir / "agent.yaml").write_text("name: default\n", encoding="utf-8")
             (root_ssh_dir / "config").write_text("Host *\n  ServerAliveInterval 60\n", encoding="utf-8")
             (root_npm_dir / "cache-index.json").write_text('{"npm":"cache"}\n', encoding="utf-8")
+            (root_lark_cli_dir / "config.json").write_text('{"cli":"lark"}\n', encoding="utf-8")
 
             config = BackupConfig(
                 dataset_repo="user/demo-backup",
@@ -229,6 +237,7 @@ class BackupTests(unittest.TestCase):
                 root_agents_dir=root_agents_dir,
                 root_ssh_dir=root_ssh_dir,
                 root_npm_dir=root_npm_dir,
+                root_lark_cli_dir=root_lark_cli_dir,
                 work_dir=tmp_path / "work",
                 repo_type="dataset",
                 path_prefix="backups",
@@ -250,6 +259,7 @@ class BackupTests(unittest.TestCase):
             self.assertIn("root-agents/agent.yaml", members)
             self.assertIn("root-ssh/config", members)
             self.assertIn("root-npm/cache-index.json", members)
+            self.assertIn("root-lark-cli/config.json", members)
 
     def test_upload_backup_writes_timestamp_and_latest(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -332,6 +342,7 @@ class BackupTests(unittest.TestCase):
             root_agents_target = tmp_path / "root-agents-target"
             root_ssh_target = tmp_path / "root-ssh-target"
             root_npm_target = tmp_path / "root-npm-target"
+            root_lark_cli_target = tmp_path / "root-lark-cli-target"
             state_target.mkdir(parents=True)
             root_config_target.mkdir(parents=True)
             root_codex_target.mkdir(parents=True)
@@ -339,6 +350,7 @@ class BackupTests(unittest.TestCase):
             root_agents_target.mkdir(parents=True)
             root_ssh_target.mkdir(parents=True)
             root_npm_target.mkdir(parents=True)
+            root_lark_cli_target.mkdir(parents=True)
             (state_target / "old-state.txt").write_text("old-state\n", encoding="utf-8")
             (root_config_target / "old-config.json").write_text('{"old":true}\n', encoding="utf-8")
             (root_codex_target / "old-codex.toml").write_text("old = true\n", encoding="utf-8")
@@ -346,6 +358,7 @@ class BackupTests(unittest.TestCase):
             (root_agents_target / "old-agent.yaml").write_text("old: true\n", encoding="utf-8")
             (root_ssh_target / "old-ssh-config").write_text("Host old\n", encoding="utf-8")
             (root_npm_target / "old-cache.json").write_text('{"old":"cache"}\n', encoding="utf-8")
+            (root_lark_cli_target / "old-lark-cli.json").write_text('{"old":"lark-cli"}\n', encoding="utf-8")
 
             restore_payload = tmp_path / "restore-payload"
             restore_state = restore_payload / "openclaw-state"
@@ -355,6 +368,7 @@ class BackupTests(unittest.TestCase):
             restore_root_agents = restore_payload / "root-agents"
             restore_root_ssh = restore_payload / "root-ssh"
             restore_root_npm = restore_payload / "root-npm"
+            restore_root_lark_cli = restore_payload / "root-lark-cli"
             restore_state.mkdir(parents=True)
             restore_root_config.mkdir(parents=True)
             restore_root_codex.mkdir(parents=True)
@@ -362,6 +376,7 @@ class BackupTests(unittest.TestCase):
             restore_root_agents.mkdir(parents=True)
             restore_root_ssh.mkdir(parents=True)
             restore_root_npm.mkdir(parents=True)
+            restore_root_lark_cli.mkdir(parents=True)
             (restore_state / "new-state.txt").write_text("new-state\n", encoding="utf-8")
             (restore_root_config / "new-config.json").write_text('{"new":true}\n', encoding="utf-8")
             (restore_root_codex / "new-codex.toml").write_text("new = true\n", encoding="utf-8")
@@ -369,6 +384,7 @@ class BackupTests(unittest.TestCase):
             (restore_root_agents / "new-agent.yaml").write_text("new: true\n", encoding="utf-8")
             (restore_root_ssh / "config").write_text("Host *\n", encoding="utf-8")
             (restore_root_npm / "cache.json").write_text('{"new":"cache"}\n', encoding="utf-8")
+            (restore_root_lark_cli / "config.json").write_text('{"new":"lark-cli"}\n', encoding="utf-8")
 
             archive = tmp_path / "latest-backup.tar.gz"
             with tarfile.open(archive, "w:gz") as tar:
@@ -379,6 +395,7 @@ class BackupTests(unittest.TestCase):
                 tar.add(str(restore_root_agents), arcname="root-agents")
                 tar.add(str(restore_root_ssh), arcname="root-ssh")
                 tar.add(str(restore_root_npm), arcname="root-npm")
+                tar.add(str(restore_root_lark_cli), arcname="root-lark-cli")
 
             config = BackupConfig(
                 dataset_repo="user/demo-backup",
@@ -390,6 +407,7 @@ class BackupTests(unittest.TestCase):
                 root_agents_dir=root_agents_target,
                 root_ssh_dir=root_ssh_target,
                 root_npm_dir=root_npm_target,
+                root_lark_cli_dir=root_lark_cli_target,
                 work_dir=tmp_path / "work",
                 repo_type="dataset",
                 path_prefix="backups",
@@ -416,6 +434,8 @@ class BackupTests(unittest.TestCase):
             self.assertFalse((root_ssh_target / "old-ssh-config").exists())
             self.assertTrue((root_npm_target / "cache.json").exists())
             self.assertFalse((root_npm_target / "old-cache.json").exists())
+            self.assertTrue((root_lark_cli_target / "config.json").exists())
+            self.assertFalse((root_lark_cli_target / "old-lark-cli.json").exists())
 
     def test_restore_keeps_extra_root_dirs_untouched_when_archive_missing_them(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -427,6 +447,7 @@ class BackupTests(unittest.TestCase):
             root_agents_target = tmp_path / "root-agents-target"
             root_ssh_target = tmp_path / "root-ssh-target"
             root_npm_target = tmp_path / "root-npm-target"
+            root_lark_cli_target = tmp_path / "root-lark-cli-target"
             state_target.mkdir(parents=True)
             root_config_target.mkdir(parents=True)
             root_codex_target.mkdir(parents=True)
@@ -434,6 +455,7 @@ class BackupTests(unittest.TestCase):
             root_agents_target.mkdir(parents=True)
             root_ssh_target.mkdir(parents=True)
             root_npm_target.mkdir(parents=True)
+            root_lark_cli_target.mkdir(parents=True)
             (state_target / "old-state.txt").write_text("old-state\n", encoding="utf-8")
             (root_config_target / "old-config.json").write_text('{"old":true}\n', encoding="utf-8")
             (root_codex_target / "old-codex.toml").write_text("old = true\n", encoding="utf-8")
@@ -441,6 +463,7 @@ class BackupTests(unittest.TestCase):
             (root_agents_target / "old-agent.yaml").write_text("old: true\n", encoding="utf-8")
             (root_ssh_target / "old-ssh-config").write_text("Host old\n", encoding="utf-8")
             (root_npm_target / "old-cache.json").write_text('{"old":"cache"}\n', encoding="utf-8")
+            (root_lark_cli_target / "old-lark-cli.json").write_text('{"old":"lark-cli"}\n', encoding="utf-8")
 
             restore_payload = tmp_path / "restore-payload"
             restore_state = restore_payload / "openclaw-state"
@@ -461,6 +484,7 @@ class BackupTests(unittest.TestCase):
                 root_agents_dir=root_agents_target,
                 root_ssh_dir=root_ssh_target,
                 root_npm_dir=root_npm_target,
+                root_lark_cli_dir=root_lark_cli_target,
                 work_dir=tmp_path / "work",
                 repo_type="dataset",
                 path_prefix="backups",
@@ -481,6 +505,7 @@ class BackupTests(unittest.TestCase):
             self.assertTrue((root_agents_target / "old-agent.yaml").exists())
             self.assertTrue((root_ssh_target / "old-ssh-config").exists())
             self.assertTrue((root_npm_target / "old-cache.json").exists())
+            self.assertTrue((root_lark_cli_target / "old-lark-cli.json").exists())
 
     def test_replace_dir_contents_clears_old_files(self):
         with tempfile.TemporaryDirectory() as tmp:
