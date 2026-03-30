@@ -54,6 +54,7 @@ class BackupConfig:
     root_agents_dir: Path = Path("/root/.agents").resolve()
     root_ssh_dir: Path = Path("/root/.ssh").resolve()
     root_npm_dir: Path = Path("/root/.npm").resolve()
+    root_lark_cli_dir: Path = Path("/root/.lark-cli").resolve()
     keep_count: int = 48
 
     @classmethod
@@ -82,6 +83,9 @@ class BackupConfig:
         ).resolve()
         root_ssh_dir = Path((os.getenv("OPENCLAW_BACKUP_ROOT_SSH_DIR") or "/root/.ssh").strip() or "/root/.ssh").resolve()
         root_npm_dir = Path((os.getenv("OPENCLAW_BACKUP_ROOT_NPM_DIR") or "/root/.npm").strip() or "/root/.npm").resolve()
+        root_lark_cli_dir = Path(
+            (os.getenv("OPENCLAW_BACKUP_ROOT_LARK_CLI_DIR") or "/root/.lark-cli").strip() or "/root/.lark-cli"
+        ).resolve()
         work_dir = Path(os.getenv("OPENCLAW_BACKUP_WORK_DIR", "/tmp/openclaw-backup")).resolve()
         repo_type = (os.getenv("OPENCLAW_BACKUP_REPO_TYPE") or "dataset").strip() or "dataset"
         path_prefix = (os.getenv("OPENCLAW_BACKUP_PATH_PREFIX") or "backups").strip("/")
@@ -120,6 +124,7 @@ class BackupConfig:
             root_agents_dir=root_agents_dir,
             root_ssh_dir=root_ssh_dir,
             root_npm_dir=root_npm_dir,
+            root_lark_cli_dir=root_lark_cli_dir,
             keep_count=keep_count,
         )
 
@@ -155,6 +160,7 @@ class OpenClawBackup:
             "root-agents": self.config.root_agents_dir,
             "root-ssh": self.config.root_ssh_dir,
             "root-npm": self.config.root_npm_dir,
+            "root-lark-cli": self.config.root_lark_cli_dir,
         }
 
     def create_archive(self, timestamp: Optional[str] = None) -> Path:

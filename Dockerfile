@@ -103,7 +103,8 @@ RUN /bin/bash -lc 'set -euo pipefail; \
       echo "npm command not found; cannot install developer CLIs" >&2; \
       exit 1; \
     fi; \
-    npm install -g --no-audit --no-fund opencode-ai @openai/codex @anthropic-ai/claude-code; \
+    npm install -g --no-audit --no-fund opencode-ai @openai/codex @anthropic-ai/claude-code @larksuite/cli; \
+    npx skills add larksuite/cli -y -g; \
     NPM_PREFIX="$(npm config get prefix)"; \
     NPM_BIN="${NPM_PREFIX%/}/bin"; \
     for cmd in opencode codex claude; do \
@@ -174,6 +175,7 @@ ENV OPENCLAW_BACKUP_ROOT_CLAUDE_DIR=/root/.claude
 ENV OPENCLAW_BACKUP_ROOT_AGENTS_DIR=/root/.agents
 ENV OPENCLAW_BACKUP_ROOT_SSH_DIR=/root/.ssh
 ENV OPENCLAW_BACKUP_ROOT_NPM_DIR=/root/.npm
+ENV OPENCLAW_BACKUP_ROOT_LARK_CLI_DIR=/root/.lark-cli
 ENV OPENCLAW_SSHX_AUTO_START=false
 ENV OPENCLAW_BACKUP_PRIVATE=true
 ENV OPENCLAW_BACKUP_PATH_PREFIX=backups
