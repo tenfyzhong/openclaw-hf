@@ -1,5 +1,8 @@
 # syntax=docker/dockerfile:1.7
 
+# Pin the patched Node LTS runtime independently of the OpenClaw installer.
+FROM node:24.22.1-bookworm-slim@sha256:1681862882da07ee5476fee047bcf34138833f1df42633bb25bcb0f438d5bf3d AS node-runtime
+
 FROM ubuntu:24.04
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -21,6 +24,8 @@ RUN printf 'Acquire::Retries "5";\nAcquire::http::Timeout "30";\nAcquire::https:
           gnupg \
           gosu \
           hostname \
+          libatomic1 \
+          libstdc++6 \
           jq \
           libasound2t64 \
           libatk-bridge2.0-0 \
@@ -61,6 +66,17 @@ RUN printf 'Acquire::Retries "5";\nAcquire::http::Timeout "30";\nAcquire::https:
       sleep $((attempt * 5)); \
     done; \
     rm -rf /var/lib/apt/lists/*
+
+# Keep Ubuntu while using the official, patched Node binary and bundled npm.
+COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
+COPY --from=node-runtime /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
+# Preserve the NodeSource global-package layout expected by our CLI symlinks.
+ENV NPM_CONFIG_PREFIX=/usr
+RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && \
+    ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx && \
+    test "$(node --version)" = "v24.22.1" && \
+    test "$(npm config get prefix)" = "/usr" && \
+    npm --version >/dev/null
 
 RUN /bin/bash -lc 'set -euo pipefail; \
     CFT_VERSION="$(curl -fsSL https://googlechromelabs.github.io/chrome-for-testing/LATEST_RELEASE_STABLE)"; \
@@ -180,6 +196,10 @@ ENV OPENCLAW_SSHX_AUTO_START=false
 ENV OPENCLAW_BACKUP_PRIVATE=true
 ENV OPENCLAW_BACKUP_PATH_PREFIX=backups
 ENV OPENCLAW_BACKUP_LATEST_NAME=latest-backup.tar.gz
+
+# Fail closed if an installer replaces or shadows the pinned runtime.
+RUN test "$(node --version)" = "v24.22.1" && \
+    test "$(npm config get prefix)" = "/usr"
 
 EXPOSE 7860
 
